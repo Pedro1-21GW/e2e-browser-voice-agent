@@ -50,6 +50,11 @@ All numbers in this repo come from one laptop unless stated otherwise: Intel i5-
 NVIDIA GTX 1050 with 3 GB (no fp16 shader support), 8 GB RAM, Windows 11, Chrome 154.
 That's a modest, 2019-era machine; a recent laptop should be faster.
 
+## License
+
+The code in this repository is [MIT](LICENSE). The models it downloads are not part of the repository and keep
+their own licenses, listed below.
+
 ## Models and credits
 
 | Role | Model | License |
