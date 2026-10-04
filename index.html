@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Browser Voice Agent Lab</title>
+  <meta name="description" content="Hypotheses and experiments for a voice agent that runs entirely in the browser.">
+  <link rel="icon" href="data:,">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+  <style>
+    :root { --bg: #fbfbf9; --surface: #fff; --text: #1c1c1a; --muted: #6b6b66; --line: #e6e5e0; --accent: #c2410c; --ok: #059669; --wip: #2563eb; }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) { --bg: #141413; --surface: #1b1b1a; --text: #ececea; --muted: #9b9b95; --line: #2a2a28; --accent: #fb923c; --ok: #34d399; --wip: #60a5fa; }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 Inter, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    main { max-width: 720px; margin: 0 auto; padding: 56px 16px 96px; }
+    a { color: inherit; text-underline-offset: 3px; text-decoration-color: var(--line); }
+    a:hover { color: var(--accent); text-decoration-color: currentColor; }
+    h1 { font-size: 1.9rem; font-weight: 600; letter-spacing: -0.02em; margin: 0 0 6px; }
+    .lede { color: var(--muted); margin: 0 0 32px; }
+    .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; margin-bottom: 14px; }
+    .tag { font: 400 0.75rem/1 "JetBrains Mono", monospace; text-transform: uppercase; letter-spacing: .06em; }
+    .tag.ok { color: var(--ok); } .tag.wip { color: var(--wip); }
+    .card h2 { font-size: 1.05rem; font-weight: 600; margin: 8px 0 6px; }
+    .card p { margin: 0 0 10px; color: var(--muted); font-size: .95rem; }
+    .links { display: flex; gap: 18px; flex-wrap: wrap; font-size: .92rem; }
+    footer { margin-top: 48px; color: var(--muted); font-size: .85rem; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Browser voice agent lab</h1>
+  <p class="lede">Can a voice agent (listen, think, speak) run entirely inside a browser tab, fast enough to hold a conversation? Each question below is a hypothesis with a working build and measurements.</p>
+
+  <div class="card">
+    <span class="tag ok">H1 · confirmed with WebGPU</span>
+    <h2>Can a single HTML file, using existing browser ML libraries and the browser cache, make a voice agent with low latency?</h2>
+    <p>Yes on a GPU: 1.4–2.1 s from the end of your speech to the agent's first sound, on a laptop with a GTX 1050. Without WebGPU it still works, but takes 12–18 s.</p>
+    <div class="links"><a href="h1-browser-libs/">Try the demo →</a><a href="https://github.com/Pedro1-21GW/e2e-browser-voice-agent/tree/main/h1-browser-libs">Write-up and code</a></div>
+  </div>
+
+  <div class="card">
+    <span class="tag wip">H2 · in progress</span>
+    <h2>Can we write the inference engine ourselves and still run it all in one HTML file?</h2>
+    <p>Replace the libraries one piece at a time with hand-written WebGPU kernels, checking correctness against a reference and speed against H1.</p>
+    <div class="links"><a href="https://github.com/Pedro1-21GW/e2e-browser-voice-agent/tree/main/h2-own-inference-engine">Plan and progress</a></div>
+  </div>
+
+  <footer>
+    <a href="https://github.com/Pedro1-21GW/e2e-browser-voice-agent">Source on GitHub</a> ·
+    <a href="https://github.com/Pedro1-21GW/e2e-browser-voice-agent/tree/main/wiki">Wiki: how it all works</a> ·
+    <a href="https://pedro1-21gw.github.io">Pedro Benevenuto Valadares</a>
+  </footer>
+</main>
+</body>
+</html>

@@ -1,0 +1,63 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>H1 component benchmarks</title>
+<script>
+  // Same cross-origin isolation trick as the main page (sw.js lives one folder up).
+  if (!crossOriginIsolated) navigator.serviceWorker.register("../sw.js").then(() => setTimeout(() => location.reload(), 300));
+</script>
+<p>Component benchmarks for H1. Driven by <code>component_bench.py</code>; open the console to call them by hand.</p>
+<script type="module">
+const ORT = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.30.0/dist/";
+const PARAKEET = "https://huggingface.co/Olicorne/parakeet-tdt-0.6b-v3-redux-onnx/resolve/main/";
+const bytes = async (u) => new Uint8Array(await (await fetch(u)).arrayBuffer());
+const decode16k = async (url) => {
+  const data = await (await fetch(url)).arrayBuffer();
+  return (await new OfflineAudioContext(1, 1, 16000).decodeAudioData(data)).getChannelData(0).slice();
+};
+
+// Parakeet encoder: CPU (wasm) vs GPU (webgpu), 2-bit vs 4-bit weights.
+window.benchEncoder = async (variant = "w2a8", ep = "wasm", threads = 4) => {
+  const ortCpu = await import(ORT + "ort.wasm.min.mjs");
+  const ort = ep === "webgpu" ? await import(ORT + "ort.webgpu.min.mjs") : ortCpu;
+  for (const o of [ortCpu, ort]) { o.env.wasm.numThreads = threads; o.env.wasm.wasmPaths = ORT; }
+  // The preprocessor casts to float64, which ORT's WebGPU build lacks, so it always uses the CPU build.
+  const pre = await ortCpu.InferenceSession.create(await bytes(PARAKEET + "nemo128.onnx"));
+  const t0 = performance.now();
+  const enc = await ort.InferenceSession.create(await bytes(PARAKEET + `${variant}/encoder-model.${variant}.onnx`),
+    { executionProviders: ep === "webgpu" ? ["webgpu", "wasm"] : ["wasm"], graphOptimizationLevel: "all" });
+  const out = { variant, ep, threads, loadMs: Math.round(performance.now() - t0) };
+  for (const clip of ["../samples/test.wav", "../samples/short.wav"]) {
+    const wav = await decode16k(clip);
+    const f = await pre.run({ waveforms: new ortCpu.Tensor("float32", wav, [1, wav.length]),
+                              waveforms_lens: new ortCpu.Tensor("int64", BigInt64Array.of(BigInt(wav.length)), [1]) });
+    const feeds = { audio_signal: new ort.Tensor("float32", f.features.data, f.features.dims),
+                    length: new ort.Tensor("int64", f.features_lens.data, f.features_lens.dims) };
+    const times = [];
+    for (let i = 0; i < 4; i++) {
+      const t = performance.now();
+      await enc.run(feeds);
+      times.push(Math.round(performance.now() - t));
+    }
+    out[clip.split("/").pop()] = { audioMs: Math.round(wav.length / 16), encMs: times };
+  }
+  return out;
+};
+
+// Kokoro TTS: how long to synthesize sentences of different lengths, and the real-time factor.
+window.benchTTS = async (device = "wasm", dtype = "fp32") => {
+  const { KokoroTTS } = await import("https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/dist/kokoro.web.js");
+  const tts = await KokoroTTS.from_pretrained("onnx-community/Kokoro-82M-v1.0-ONNX", { device, dtype });
+  await tts.generate("Warm up.", { voice: "af_heart" });
+  const out = [];
+  for (const s of ["Hello!", "The capital of France is Paris.",
+                   "In summer, the weather in Campinas is usually warm and sunny, with highs around thirty degrees."]) {
+    const t = performance.now();
+    const a = await tts.generate(s, { voice: "af_heart" });
+    const ms = performance.now() - t;
+    out.push({ chars: s.length, ms: Math.round(ms), audioMs: Math.round(a.audio.length / 24),
+               timesRealTime: +(a.audio.length / 24 / ms).toFixed(2) });
+  }
+  return { device, dtype, sentences: out };
+};
+window.ready = true;
+</script>

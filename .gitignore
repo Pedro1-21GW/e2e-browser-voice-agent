@@ -1,0 +1,6 @@
+models/
+.chrome-profile/
+__pycache__/
+*.pyc
+.venv/
+venv/

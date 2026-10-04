@@ -1,0 +1,666 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Browser Voice Agent</title>
+  <meta name="description" content="A voice agent that runs speech recognition, a language model and speech synthesis entirely in your browser.">
+  <script>
+    // Multithreaded WebAssembly needs cross-origin isolation; sw.js adds the headers.
+    if (!window.crossOriginIsolated && "serviceWorker" in navigator) {
+      navigator.serviceWorker.register("sw.js").then(() => {
+        if (!sessionStorage.getItem("coi-reloaded")) {
+          sessionStorage.setItem("coi-reloaded", "1");
+          location.reload();
+        }
+      });
+    }
+  </script>
+  <link rel="icon" href="data:,">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #fbfbf9; --surface: #ffffff; --text: #1c1c1a; --muted: #6b6b66; --line: #e6e5e0;
+      --accent: #c2410c; --tag-bg: #f1efe9;
+      --c-end: #a8a29e; --c-asr: #2563eb; --c-llm: #c2410c; --c-tts: #059669;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg: #141413; --surface: #1b1b1a; --text: #ececea; --muted: #9b9b95; --line: #2a2a28;
+        --accent: #fb923c; --tag-bg: #232321;
+        --c-end: #78716c; --c-asr: #60a5fa; --c-llm: #fb923c; --c-tts: #34d399;
+      }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 Inter, system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
+    main { max-width: 760px; margin: 0 auto; padding: 48px 16px 96px; }
+    a { color: inherit; text-decoration-color: var(--line); text-underline-offset: 3px; }
+    a:hover { color: var(--accent); text-decoration-color: currentColor; }
+    .mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
+    .back { font-size: 0.9rem; color: var(--muted); text-decoration: none; }
+    h1 { font-size: 1.9rem; font-weight: 600; letter-spacing: -0.02em; margin: 16px 0 4px; }
+    .lede { color: var(--muted); margin: 0 0 28px; }
+    h2 { font: 400 0.78rem/1 "JetBrains Mono", ui-monospace, monospace; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 40px 0 14px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+
+    .stack { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .stage { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px; min-width: 0; }
+    .stage .k { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+    .stage .name { font-weight: 600; font-size: 0.95rem; margin-top: 2px; }
+    .stage .det { font-size: 0.8rem; color: var(--muted); }
+    .bar { height: 4px; background: var(--tag-bg); border-radius: 2px; margin-top: 10px; overflow: hidden; }
+    .bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+    .stage .st { font-size: 0.78rem; color: var(--muted); margin-top: 6px; overflow-wrap: anywhere; }
+
+    .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 20px; }
+    button { font: inherit; font-size: 0.95rem; border: 1px solid var(--line); background: var(--surface); color: var(--text); padding: 9px 16px; border-radius: 8px; cursor: pointer; }
+    button.primary { background: var(--text); color: var(--bg); border-color: var(--text); font-weight: 500; }
+    button:disabled { opacity: .45; cursor: default; }
+    select { font: inherit; font-size: 0.85rem; background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+    label.opt { font-size: 0.85rem; color: var(--muted); display: inline-flex; gap: 6px; align-items: center; }
+    .settings { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 14px; }
+
+    .status { display: flex; align-items: center; gap: 10px; margin-top: 22px; font-weight: 500; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--line); flex: none; }
+    .status[data-s="listening"] .dot { background: var(--c-tts); }
+    .status[data-s="hearing"] .dot { background: var(--c-tts); box-shadow: 0 0 0 4px color-mix(in srgb, var(--c-tts) 30%, transparent); }
+    .status[data-s="transcribing"] .dot { background: var(--c-asr); }
+    .status[data-s="thinking"] .dot { background: var(--c-llm); }
+    .status[data-s="speaking"] .dot { background: var(--c-llm); box-shadow: 0 0 0 4px color-mix(in srgb, var(--c-llm) 30%, transparent); }
+    .note { font-size: 0.85rem; color: var(--muted); margin-top: 8px; }
+
+    .chat { display: flex; flex-direction: column; gap: 10px; }
+    .msg { max-width: 85%; padding: 8px 12px; border-radius: 10px; font-size: 0.95rem; }
+    .msg.user { align-self: flex-end; background: var(--tag-bg); }
+    .msg.agent { align-self: flex-start; background: var(--surface); border: 1px solid var(--line); }
+    .empty { color: var(--muted); font-size: 0.9rem; }
+
+    .lat-total { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+    .lat-total .big { font-size: 2rem; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+    .lat-total .lbl { color: var(--muted); font-size: 0.9rem; }
+    .lat-bar { display: flex; height: 22px; border-radius: 4px; overflow: hidden; margin: 12px 0 8px; gap: 2px; }
+    .lat-bar > div { min-width: 2px; }
+    .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.82rem; color: var(--muted); }
+    .legend span::before { content: ""; display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; background: var(--c); vertical-align: 0; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-top: 16px; font-variant-numeric: tabular-nums; }
+    th, td { text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+    th:first-child, td:first-child { text-align: left; }
+    th { font-weight: 500; color: var(--muted); }
+    .scroll { overflow-x: auto; }
+    .credits { font-size: 0.82rem; color: var(--muted); }
+    .credits li { margin-bottom: 4px; }
+    .err { color: #dc2626; font-size: 0.9rem; margin-top: 10px; white-space: pre-wrap; }
+
+    @media (max-width: 600px) {
+      .stack { grid-template-columns: 1fr; }
+      main { padding-top: 32px; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <a class="back" href="../">← e2e-browser-voice-agent · all hypotheses</a>
+  <h1>A voice agent in a browser tab</h1>
+  <p class="lede">Speech recognition, a language model and speech synthesis, all running on your own device. No server, no API keys; your audio never leaves the browser. Works best in a recent Chrome or Edge on a computer with a GPU.</p>
+
+  <div class="stack">
+    <div class="stage" id="st-asr">
+      <div class="k">Speech to text · GPU + CPU</div>
+      <div class="name">Parakeet TDT 0.6B v3 (Redux)</div>
+      <div class="det">ternary encoder, 2-bit ONNX · 208 MB</div>
+      <div class="bar"><i></i></div><div class="st">not loaded</div>
+    </div>
+    <div class="stage" id="st-llm">
+      <div class="k">Language model · <span class="dev">GPU</span></div>
+      <div class="name" id="llm-name">LFM2 350M</div>
+      <div class="det" id="llm-det">4-bit · 293 MB</div>
+      <div class="bar"><i></i></div><div class="st">not loaded</div>
+    </div>
+    <div class="stage" id="st-tts">
+      <div class="k">Text to speech · <span class="dev">GPU</span></div>
+      <div class="name">Kokoro 82M</div>
+      <div class="det" id="tts-det">fp32 · 325 MB</div>
+      <div class="bar"><i></i></div><div class="st">not loaded</div>
+    </div>
+  </div>
+
+  <div class="settings">
+    <label class="opt">Language model
+      <select id="llm-select">
+        <option value="lfm2-350m">LFM2 350M (293 MB)</option>
+        <option value="lfm2-700m">LFM2 700M (559 MB)</option>
+        <option value="qwen25-05b">Qwen2.5 0.5B Instruct (786 MB)</option>
+      </select>
+    </label>
+    <label class="opt">Voice
+      <select id="voice-select">
+        <option value="af_heart">Heart (US)</option>
+        <option value="af_bella">Bella (US)</option>
+        <option value="am_michael">Michael (US)</option>
+        <option value="bf_emma">Emma (UK)</option>
+        <option value="bm_george">George (UK)</option>
+      </select>
+    </label>
+    <label class="opt"><input type="checkbox" id="barge"> Let me interrupt (use headphones)</label>
+  </div>
+
+  <div class="controls">
+    <button class="primary" id="btn-load">Load models (~830 MB, cached after the first visit)</button>
+    <button id="btn-talk" disabled>Start talking</button>
+    <button id="btn-test" disabled>Run test clip</button>
+  </div>
+  <div class="status" id="status" data-s="idle"><span class="dot"></span><span id="status-text">Models not loaded</span></div>
+  <div class="note" id="env-note"></div>
+  <div class="err" id="err"></div>
+
+  <h2>Conversation</h2>
+  <div class="chat" id="chat"><div class="empty">Load the models, press <b>Start talking</b>, and say something.</div></div>
+
+  <h2>Latency, last turn</h2>
+  <div class="lat-total"><span class="big" id="v2v">–</span><span class="lbl">from the end of your speech to the agent's first sound</span></div>
+  <div class="lat-bar" id="lat-bar"></div>
+  <div class="legend">
+    <span style="--c: var(--c-end)">Waiting for silence</span>
+    <span style="--c: var(--c-asr)">Speech to text (after the silence wait)</span>
+    <span style="--c: var(--c-llm)">LLM to first sentence</span>
+    <span style="--c: var(--c-tts)">First sentence to audio</span>
+  </div>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Turn</th><th>Total</th><th>Your audio</th><th>Silence wait</th><th>STT (speed)</th><th>LLM first token</th><th>LLM first sentence</th><th>TTS first audio</th><th>LLM tok/s</th></tr></thead>
+      <tbody id="lat-rows"></tbody>
+    </table>
+  </div>
+
+  <h2>How it works</h2>
+  <p class="credits" style="font-size:.92rem">A voice activity detector (Silero VAD) listens to the microphone in 32 ms frames. After 160 ms of silence it starts transcribing speculatively; if the silence reaches 500 ms, that's the end of your turn and the transcript is usually already done. If you start talking again before the agent makes a sound, it treats the pause as mid-sentence and merges both parts.</p>
+  <p class="credits" style="font-size:.92rem">Speech recognition is Parakeet, a transducer model whose encoder weights are all −1, 0 or +1. The encoder runs on the GPU through WebGPU; the token-and-duration decoding loop is hand-written and runs on the CPU in ONNX Runtime Web. The text goes to a small language model on the GPU that streams tokens, and as soon as the first sentence (or a long first clause) is complete, Kokoro synthesizes it while the model keeps writing the rest.</p>
+  <ul class="credits">
+    <li>Speech to text: NVIDIA <a href="https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3">Parakeet TDT 0.6B v3</a> → Moondream <a href="https://huggingface.co/moondream/parakeet-redux">Parakeet Redux</a> → <a href="https://huggingface.co/Olicorne/parakeet-tdt-0.6b-v3-redux-onnx">ONNX export</a> (CC BY 4.0)</li>
+    <li>Language model: Liquid AI <a href="https://huggingface.co/onnx-community/LFM2-350M-ONNX">LFM2</a> or Alibaba <a href="https://huggingface.co/onnx-community/Qwen2.5-0.5B-Instruct">Qwen2.5</a>, via <a href="https://github.com/huggingface/transformers.js">Transformers.js</a></li>
+    <li>Text to speech: <a href="https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX">Kokoro 82M</a> (Apache 2.0) via <a href="https://www.npmjs.com/package/kokoro-js">kokoro-js</a></li>
+    <li>Voice activity detection: <a href="https://github.com/snakers4/silero-vad">Silero VAD</a> (MIT) · Runtime: <a href="https://onnxruntime.ai">ONNX Runtime Web</a></li>
+  </ul>
+</main>
+
+<script type="module">
+import * as ort from "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.30.0/dist/ort.wasm.min.mjs";
+import { pipeline, TextStreamer, InterruptableStoppingCriteria } from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.0";
+import { KokoroTTS, TextSplitterStream } from "https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/dist/kokoro.web.js";
+
+// ---------- config ----------
+const params = new URLSearchParams(location.search);
+const PARAKEET = "https://huggingface.co/Olicorne/parakeet-tdt-0.6b-v3-redux-onnx/resolve/main/";
+const ASR_FILES = {
+  pre: { url: PARAKEET + "nemo128.onnx", size: 139764 },
+  enc: { url: PARAKEET + "w2a8/encoder-model.w2a8.onnx", size: 189998739 },
+  dec: { url: PARAKEET + "int8/decoder_joint-model.int8.onnx", size: 18203490 },
+  vocab: { url: PARAKEET + "vocab.txt", size: 93939 },
+  vad: { url: "https://huggingface.co/onnx-community/silero-vad/resolve/main/onnx/model.onnx", size: 2243022 },
+};
+const LLMS = {
+  "lfm2-350m": { id: "onnx-community/LFM2-350M-ONNX", name: "LFM2 350M", mb: 293 },
+  "lfm2-700m": { id: "onnx-community/LFM2-700M-ONNX", name: "LFM2 700M", mb: 559 },
+  "qwen25-05b": { id: "onnx-community/Qwen2.5-0.5B-Instruct", name: "Qwen2.5 0.5B Instruct", mb: 786 },
+};
+const SYSTEM_PROMPT = "You are a friendly voice assistant. Your replies are spoken aloud, so answer in one or two short, natural sentences. Never use lists, markdown, emojis or code.";
+const ENDPOINT_MS = Number(params.get("endpoint") || 500);   // silence needed to end a turn
+const FRAME = 512, CTX = 64, SR = 16000, FRAME_MS = FRAME / SR * 1000;
+const BLANK = 8192, VOCAB_SIZE = 8193, MAX_TOKENS_PER_STEP = 10;
+
+// ---------- small helpers ----------
+const $ = (id) => document.getElementById(id);
+const now = () => performance.now();
+const fmt = (ms) => ms == null || isNaN(ms) ? "–" : ms >= 1000 ? (ms / 1000).toFixed(2) + " s" : Math.round(ms) + " ms";
+function setStage(id, { pct, text }) {
+  const el = $(id);
+  if (pct != null) el.querySelector(".bar > i").style.width = Math.min(100, pct) + "%";
+  if (text != null) el.querySelector(".st").textContent = text;
+}
+function setStatus(s, text) { $("status").dataset.s = s; $("status-text").textContent = text; }
+function showError(e) { console.error(e); $("err").textContent = String(e && e.stack || e); }
+
+// Download with progress, cached in the Cache API so later visits are instant.
+async function fetchCached(url, expected, onProgress) {
+  const cache = await caches.open("voice-agent-models").catch(() => null);
+  const hit = cache && await cache.match(url);
+  if (hit) { onProgress(1); return new Uint8Array(await hit.arrayBuffer()); }
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`${res.status} fetching ${url}`);
+  const total = Number(res.headers.get("content-length")) || expected;
+  const reader = res.body.getReader(), chunks = [];
+  let got = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value); got += value.length; onProgress(got / total);
+  }
+  const bytes = new Uint8Array(got);
+  let off = 0; for (const c of chunks) { bytes.set(c, off); off += c.length; }
+  if (cache) await cache.put(url, new Response(bytes)).catch(() => {});
+  return bytes;
+}
+
+// ---------- speech to text: Parakeet TDT with a hand-written greedy decoder ----------
+const asr = {};
+async function loadASR() {
+  ort.env.wasm.numThreads = self.crossOriginIsolated ? Math.min(4, navigator.hardwareConcurrency || 4) : 1;
+  ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.30.0/dist/";
+  const total = Object.values(ASR_FILES).reduce((a, f) => a + f.size, 0);
+  const done = {};
+  const prog = (k) => (p) => {
+    done[k] = p * ASR_FILES[k].size;
+    const sum = Object.values(done).reduce((a, b) => a + b, 0);
+    setStage("st-asr", { pct: sum / total * 100, text: `downloading ${Math.round(sum / 1e6)} / ${Math.round(total / 1e6)} MB` });
+  };
+  const [pre, enc, dec, vocab, vad] = await Promise.all(
+    Object.keys(ASR_FILES).map((k) => fetchCached(ASR_FILES[k].url, ASR_FILES[k].size, prog(k))));
+  setStage("st-asr", { text: "initializing" });
+  const opts = { executionProviders: ["wasm"], graphOptimizationLevel: "all" };
+  asr.pre = await ort.InferenceSession.create(pre, opts);
+  // The encoder is ~95% of the compute: on WebGPU it runs ~15x faster than WebAssembly.
+  // It needs ORT's WebGPU build, which lacks the float64 Cast the preprocessor uses, so it gets its own runtime.
+  const gpu = params.get("asr") !== "wasm" && navigator.gpu && await navigator.gpu.requestAdapter().catch(() => null);
+  if (gpu) {
+    asr.ortEnc = await import("https://cdn.jsdelivr.net/npm/onnxruntime-web@1.30.0/dist/ort.webgpu.min.mjs");
+    asr.ortEnc.env.wasm.wasmPaths = ort.env.wasm.wasmPaths;
+    asr.ortEnc.env.wasm.numThreads = ort.env.wasm.numThreads;
+    asr.ortEnc.env.logLevel = "error";
+    asr.enc = await asr.ortEnc.InferenceSession.create(enc, { executionProviders: ["webgpu", "wasm"], graphOptimizationLevel: "all" });
+  } else {
+    asr.ortEnc = ort;
+    asr.enc = await ort.InferenceSession.create(enc, opts);
+  }
+  asr.device = gpu ? "webgpu" : "wasm";
+  $("st-asr").querySelector(".k").textContent = gpu ? "Speech to text · GPU + CPU" : "Speech to text · CPU";
+  asr.dec = await ort.InferenceSession.create(dec, opts);
+  asr.vad = await ort.InferenceSession.create(vad, opts);
+  asr.vocab = [];
+  for (const line of new TextDecoder().decode(vocab).split("\n")) {
+    const i = line.lastIndexOf(" ");
+    if (i > 0) asr.vocab[Number(line.slice(i + 1))] = line.slice(0, i).replaceAll("▁", " ");
+  }
+}
+
+async function transcribe(wav) {
+  const t0 = now();
+  const { features, features_lens } = await asr.pre.run({
+    waveforms: new ort.Tensor("float32", wav, [1, wav.length]),
+    waveforms_lens: new ort.Tensor("int64", BigInt64Array.of(BigInt(wav.length)), [1]),
+  });
+  const E = asr.ortEnc;
+  const { outputs, encoded_lengths } = await asr.enc.run({
+    audio_signal: new E.Tensor("float32", features.data, features.dims),
+    length: new E.Tensor("int64", features_lens.data, features_lens.dims),
+  });
+  const t1 = now();
+  const D = outputs.dims[1], T = outputs.dims[2], len = Number(encoded_lengths.data[0]), e = outputs.data;
+  const zeros = () => new ort.Tensor("float32", new Float32Array(2 * 640), [2, 1, 640]);
+  const targetLen = new ort.Tensor("int32", Int32Array.of(1), [1]);
+  let s1 = zeros(), s2 = zeros();
+  const tokens = [];
+  let t = 0, emitted = 0;
+  while (t < len) {
+    const frame = new Float32Array(D);
+    for (let d = 0; d < D; d++) frame[d] = e[d * T + t];
+    const r = await asr.dec.run({
+      encoder_outputs: new ort.Tensor("float32", frame, [1, D, 1]),
+      targets: new ort.Tensor("int32", Int32Array.of(tokens.length ? tokens.at(-1) : BLANK), [1, 1]),
+      target_length: targetLen, input_states_1: s1, input_states_2: s2,
+    }, ["outputs", "output_states_1", "output_states_2"]);
+    const o = r.outputs.data;
+    let tok = 0; for (let i = 1; i < VOCAB_SIZE; i++) if (o[i] > o[tok]) tok = i;
+    let dur = 0; for (let i = 1; i < o.length - VOCAB_SIZE; i++) if (o[VOCAB_SIZE + i] > o[VOCAB_SIZE + dur]) dur = i;
+    if (tok !== BLANK) { s1 = r.output_states_1; s2 = r.output_states_2; tokens.push(tok); emitted++; }
+    if (dur > 0) { t += dur; emitted = 0; }
+    else if (tok === BLANK || emitted === MAX_TOKENS_PER_STEP) { t++; emitted = 0; }
+  }
+  const t2 = now();
+  const text = tokens.map((i) => asr.vocab[i]).join("").replace(/\s+/g, " ").trim();
+  return { text, encMs: t1 - t0, decMs: t2 - t1, ms: t2 - t0 };
+}
+
+// ---------- language model ----------
+let llm, llmKey;
+async function loadLLM() {
+  const adapter = navigator.gpu && await navigator.gpu.requestAdapter().catch(() => null);
+  // Without WebGPU: the LFM2 exports (4- and 8-bit) use GatherBlockQuantized, which the CPU runtime lacks,
+  // while Qwen2.5's 8-bit export uses standard integer ops, so the CPU path always uses that.
+  llmKey = adapter ? $("llm-select").value : "qwen25-05b";
+  const m = LLMS[llmKey];
+  const device = adapter ? "webgpu" : "wasm";
+  const dtype = !adapter ? "q8" : adapter.features.has("shader-f16") ? "q4f16" : "q4";
+  $("st-llm").querySelector(".dev").textContent = adapter ? "GPU" : "CPU (no WebGPU)";
+  $("llm-name").textContent = m.name;
+  $("llm-det").textContent = dtype === "q8" ? "8-bit · 512 MB (CPU fallback)" : `${dtype} · ~${m.mb} MB`;
+  const files = {};
+  llm = await pipeline("text-generation", m.id, {
+    device, dtype,
+    progress_callback: (p) => {
+      if (p.status === "progress" && p.total) {
+        files[p.file] = [p.loaded, p.total];
+        const [a, b] = Object.values(files).reduce(([x, y], [l, t]) => [x + l, y + t], [0, 0]);
+        setStage("st-llm", { pct: a / b * 100, text: `downloading ${Math.round(a / 1e6)} / ${Math.round(b / 1e6)} MB` });
+      }
+    },
+  });
+  return { device, dtype };
+}
+
+// ---------- text to speech ----------
+let tts;
+async function loadTTS() {
+  // Kokoro on the CPU is slower than real time on many laptops, so prefer the GPU.
+  // fp32 because 8-bit runs slower than fp32 in WebAssembly and many GPUs lack fp16 shaders.
+  const hasGPU = navigator.gpu && await navigator.gpu.requestAdapter().catch(() => null);
+  const device = params.get("tts") || (hasGPU ? "webgpu" : "wasm");
+  const dtype = "fp32";
+  $("st-tts").querySelector(".dev").textContent = device === "webgpu" ? "GPU" : "CPU";
+  const files = {};
+  tts = await KokoroTTS.from_pretrained("onnx-community/Kokoro-82M-v1.0-ONNX", {
+    dtype, device,
+    progress_callback: (p) => {
+      if (p.status === "progress" && p.total) {
+        files[p.file] = [p.loaded, p.total];
+        const [a, b] = Object.values(files).reduce(([x, y], [l, t]) => [x + l, y + t], [0, 0]);
+        setStage("st-tts", { pct: a / b * 100, text: `downloading ${Math.round(a / 1e6)} / ${Math.round(b / 1e6)} MB` });
+      }
+    },
+  });
+  return { device, dtype };
+}
+
+// ---------- audio output ----------
+let playCtx, playHead = 0;
+const sources = new Set();
+function playChunk(samples, sampleRate) {
+  const buf = playCtx.createBuffer(1, samples.length, sampleRate);
+  buf.copyToChannel(samples, 0);
+  const src = playCtx.createBufferSource();
+  src.buffer = buf; src.connect(playCtx.destination);
+  const startAt = Math.max(playCtx.currentTime + 0.02, playHead);
+  src.start(startAt);
+  playHead = startAt + buf.duration;
+  sources.add(src); src.onended = () => sources.delete(src);
+  return now() + (startAt - playCtx.currentTime) * 1000;   // when it becomes audible, in performance.now() time
+}
+function stopPlayback() { for (const s of sources) { try { s.stop(); } catch {} } sources.clear(); playHead = 0; }
+const playbackDone = () => new Promise((r) => {
+  const check = () => (playCtx.currentTime >= playHead - 0.01 ? r() : setTimeout(check, 50));
+  check();
+});
+
+// ---------- the conversation turn ----------
+let history = [], turn = 0, busy = false, stopper = null;
+const results = [];
+
+function addMsg(role, text) {
+  const chat = $("chat");
+  chat.querySelector(".empty")?.remove();
+  const el = document.createElement("div");
+  el.className = "msg " + role; el.textContent = text;
+  chat.appendChild(el); return el;
+}
+
+// If the user starts talking again before the agent makes a sound, the pause wasn't the end of
+// their turn: drop the pending reply and merge what was said into the next utterance.
+let current = null, carry = null;
+function cancelForContinuation() {
+  const c = current;
+  if (!c) return;
+  turn++; stopper?.interrupt(); stopPlayback();
+  c.els.forEach((el) => el.remove());
+  history.length = c.historyLen;
+  carry = c.text != null ? { text: c.text } : { wav: c.wav };
+  current = null; busy = false;
+}
+
+// asrPromise: a transcription already started during the silence wait (speculative), if any.
+async function handleUtterance(wav, speechEndAt, endpointMs, asrPromise = null) {
+  const id = ++turn;
+  busy = true;
+  let prefixText = null;
+  if (carry) {
+    if (carry.text != null) prefixText = carry.text;
+    else { const w = new Float32Array(carry.wav.length + wav.length); w.set(carry.wav); w.set(wav, carry.wav.length); wav = w; asrPromise = null; }
+    carry = null;
+  }
+  const c = current = { id, wav, text: null, els: [], historyLen: history.length, audible: false };
+  const m = { turn: id, audioMs: wav.length / SR * 1000, endpointMs, speculative: !!asrPromise, merged: prefixText != null };
+  try {
+    setStatus("transcribing", "Transcribing…");
+    const w0 = now();
+    const r = await (asrPromise || transcribe(wav));
+    if (id !== turn) return m;
+    const text = [prefixText, r.text].filter(Boolean).join(" ");
+    c.text = text;
+    Object.assign(m, { asrMs: r.ms, asrWaitMs: now() - w0, asrEncMs: r.encMs, asrDecMs: r.decMs, text });
+    if (!text) return m;
+    c.els.push(addMsg("user", text));
+    history.push({ role: "user", content: text });
+
+    setStatus("thinking", "Thinking…");
+    const agentEl = addMsg("agent", "…");
+    c.els.push(agentEl);
+    const voice = $("voice-select").value;
+    const splitter = new TextSplitterStream();
+    let firstAudioAt = null;
+    const speaker = (async () => {
+      for await (const { audio } of tts.stream(splitter, { voice })) {
+        if (id !== turn) break;
+        const at = playChunk(audio.audio, audio.sampling_rate);
+        if (firstAudioAt == null) { firstAudioAt = at; m.ttsReadyAt = now(); c.audible = true; setStatus("speaking", "Speaking"); }
+      }
+    })();
+
+    const llmStart = now();
+    let reply = "", firstTokAt = null, firstSentenceAt = null, nTok = 0;
+    stopper = new InterruptableStoppingCriteria();
+    const streamer = new TextStreamer(llm.tokenizer, {
+      skip_prompt: true, skip_special_tokens: true,
+      callback_function: (txt) => {
+        if (id !== turn) return;
+        if (firstTokAt == null) firstTokAt = now();
+        reply += txt;
+        if (firstSentenceAt == null && /[.!?](\s|$)/.test(reply)) firstSentenceAt = now();
+        // Long first sentence: send its first clause to the voice right away.
+        if (firstSentenceAt == null && /[,;:]\s*$/.test(reply) && reply.trim().split(/\s+/).length >= 5) {
+          firstSentenceAt = now();
+          splitter.push(txt);
+          splitter.flush();
+          agentEl.textContent = reply;
+          return;
+        }
+        agentEl.textContent = reply;
+        splitter.push(txt);
+      },
+      token_callback_function: () => { nTok++; },
+    });
+    const msgs = [{ role: "system", content: SYSTEM_PROMPT }, ...history.slice(-6)];
+    await llm(msgs, { max_new_tokens: 120, do_sample: false, repetition_penalty: 1.05, streamer, stopping_criteria: stopper });
+    const llmEnd = now();
+    if (firstSentenceAt == null) firstSentenceAt = llmEnd;   // reply without terminal punctuation
+    splitter.close();
+    await speaker;
+    if (id !== turn) return m;
+    history.push({ role: "assistant", content: reply.trim() });
+    Object.assign(m, {
+      reply: reply.trim(),
+      llmTtftMs: firstTokAt - llmStart,
+      llmFirstSentenceMs: firstSentenceAt - llmStart,
+      llmTokS: nTok > 1 && firstTokAt ? (nTok - 1) / ((llmEnd - firstTokAt) / 1000) : null,
+      ttsFirstMs: m.ttsReadyAt ? m.ttsReadyAt - firstSentenceAt : null,
+      v2vMs: firstAudioAt ? firstAudioAt - speechEndAt : null,
+    });
+    if (id === turn) { results.push(m); renderLatency(m); }
+    await playbackDone();
+  } catch (e) { showError(e); }
+  finally {
+    if (id === turn) { busy = false; current = null; resetVad(); setStatus(listening ? "listening" : "idle", listening ? "Listening" : "Ready"); }
+  }
+  return m;
+}
+
+function renderLatency(m) {
+  $("v2v").textContent = fmt(m.v2vMs);
+  const parts = [
+    [m.endpointMs, "var(--c-end)"], [m.asrWaitMs, "var(--c-asr)"],
+    [m.llmFirstSentenceMs, "var(--c-llm)"], [m.ttsFirstMs, "var(--c-tts)"],
+  ];
+  $("lat-bar").innerHTML = parts.map(([v, c]) => `<div style="flex:${Math.max(v || 0, 1)};background:${c}" title="${fmt(v)}"></div>`).join("");
+  const tr = document.createElement("tr");
+  tr.innerHTML = [results.length, `<b>${fmt(m.v2vMs)}</b>`, fmt(m.audioMs), fmt(m.endpointMs),
+    `${fmt(m.asrMs)} (${Math.round(m.audioMs / m.asrMs)}×)`,
+    fmt(m.llmTtftMs), fmt(m.llmFirstSentenceMs), fmt(m.ttsFirstMs), m.llmTokS ? m.llmTokS.toFixed(1) : "–"]
+    .map((v) => `<td>${v}</td>`).join("");
+  $("lat-rows").prepend(tr);
+}
+
+// ---------- microphone + voice activity detection ----------
+let micCtx, micStream, listening = false;
+let vadState, vadContext, speaking = false, silent = 0, voiced = 0, utter = [], preRoll = [], lastVoiceAt = 0, spec = null;
+const SPEC_MS = Number(params.get("spec") ?? 160);   // pause length that triggers a speculative transcription
+const srTensor = () => new ort.Tensor("int64", BigInt64Array.of(16000n), []);
+function resetVad() {
+  vadState = new ort.Tensor("float32", new Float32Array(2 * 128), [2, 1, 128]);
+  vadContext = new Float32Array(CTX); speaking = false; silent = 0; voiced = 0; utter = []; preRoll = []; spec = null;
+}
+async function vadProb(frame) {
+  const input = new Float32Array(CTX + FRAME);
+  input.set(vadContext); input.set(frame, CTX);
+  vadContext = frame.slice(FRAME - CTX);
+  const r = await asr.vad.run({ input: new ort.Tensor("float32", input, [1, CTX + FRAME]), state: vadState, sr: srTensor() });
+  vadState = r.stateN;
+  return r.output.data[0];
+}
+let queue = Promise.resolve();
+function onFrame(frame) { queue = queue.then(() => processFrame(frame)).catch(showError); }
+async function processFrame(frame) {
+  const canBarge = $("barge").checked;
+  const audible = current?.audible;
+  // While the agent is talking, the mic would mostly hear the agent (unless on headphones).
+  if (busy && audible && !canBarge) return;
+  const p = await vadProb(frame);
+  if (!speaking) {
+    preRoll.push(frame); if (preRoll.length > 10) preRoll.shift();
+    if (p >= 0.5) {
+      speaking = true; utter = [...preRoll]; silent = 0; voiced = 1; lastVoiceAt = now();
+      if (busy && !audible) cancelForContinuation();
+      else if (busy && canBarge) { turn++; stopper?.interrupt(); stopPlayback(); current = null; busy = false; }
+      setStatus("hearing", "Hearing you…");
+    }
+    return;
+  }
+  utter.push(frame);
+  if (p < 0.35) silent++; else { silent = 0; voiced++; lastVoiceAt = now(); spec = null; }
+  // Speculative transcription: start on a short pause, keep it only if the pause becomes the end of the turn.
+  if (SPEC_MS > 0 && !spec && voiced >= 6 && silent * FRAME_MS >= SPEC_MS) {
+    const wav = toWav(utter.slice(0, utter.length - Math.max(0, silent - 4)));
+    spec = { wav, promise: transcribe(wav) };
+    spec.promise.catch(() => {});   // a discarded speculation must not surface as an unhandled rejection
+  }
+  if (silent * FRAME_MS >= ENDPOINT_MS) {
+    const endpointMs = now() - lastVoiceAt;
+    const s = spec, frames = utter.slice(0, utter.length - Math.max(0, silent - 4));   // keep ~130 ms of trailing silence
+    speaking = false; utter = []; preRoll = []; spec = null;
+    if (voiced < 6) { setStatus("listening", "Listening"); return; }   // ignore clicks and coughs
+    handleUtterance(s ? s.wav : toWav(frames), lastVoiceAt, endpointMs, s?.promise);
+  }
+}
+function toWav(frames) {
+  const wav = new Float32Array(frames.length * FRAME);
+  frames.forEach((f, i) => wav.set(f, i * FRAME));
+  return wav;
+}
+
+const WORKLET = `class Rec extends AudioWorkletProcessor {
+  constructor() { super(); this.buf = new Float32Array(${FRAME}); this.n = 0; }
+  process(inputs) {
+    const ch = inputs[0][0];
+    if (ch) for (let i = 0; i < ch.length; i++) {
+      this.buf[this.n++] = ch[i];
+      if (this.n === ${FRAME}) { this.port.postMessage(this.buf.slice()); this.n = 0; }
+    }
+    return true;
+  }
+}
+registerProcessor("rec", Rec);`;
+
+async function startMic() {
+  micStream = await navigator.mediaDevices.getUserMedia({
+    audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+  });
+  micCtx = new AudioContext({ sampleRate: SR });
+  await micCtx.audioWorklet.addModule(URL.createObjectURL(new Blob([WORKLET], { type: "application/javascript" })));
+  const node = new AudioWorkletNode(micCtx, "rec");
+  node.port.onmessage = (e) => { if (listening) onFrame(e.data); };
+  micCtx.createMediaStreamSource(micStream).connect(node);
+  resetVad(); listening = true;
+  setStatus("listening", "Listening");
+}
+function stopMic() {
+  listening = false;
+  micStream?.getTracks().forEach((t) => t.stop());
+  micCtx?.close();
+  setStatus("idle", "Ready");
+}
+
+// ---------- test clip (no microphone) ----------
+async function decodeTo16k(url) {
+  const data = await (await fetch(url)).arrayBuffer();
+  const tmp = new OfflineAudioContext(1, 1, SR);
+  const buf = await tmp.decodeAudioData(data);
+  return buf.getChannelData(0).slice();
+}
+async function runClip(url = "samples/test.wav") {
+  if (busy) return null;
+  const wav = await decodeTo16k(url);
+  // The clip is complete, so there is no silence to wait for: latency is measured from "now".
+  return handleUtterance(wav, now(), 0);
+}
+
+// ---------- load + warm up ----------
+async function load() {
+  $("btn-load").disabled = true; $("llm-select").disabled = true;
+  playCtx = new AudioContext();
+  const t0 = now();
+  setStatus("loading", "Downloading models…");
+  const asrP = loadASR().then(() => setStage("st-asr", { pct: 100, text: "ready" }));
+  const llmP = loadLLM().then((x) => { setStage("st-llm", { pct: 100, text: `ready (${x.device})` }); return x; });
+  const ttsP = loadTTS().then((x) => { setStage("st-tts", { pct: 100, text: `ready (${x.device})` }); return x; });
+  const [, llmInfo, ttsInfo] = await Promise.all([asrP, llmP, ttsP]);
+  const loadMs = now() - t0;
+
+  // Warm-up: first calls compile shaders and allocate buffers, so keep them out of the measurements.
+  setStatus("loading", "Warming up…");
+  const w0 = now();
+  await transcribe(new Float32Array(SR));
+  await transcribe(new Float32Array(3 * SR));
+  resetVad(); await vadProb(new Float32Array(FRAME));
+  await llm([{ role: "user", content: "Hi" }], { max_new_tokens: 4, do_sample: false });
+  await tts.generate("Hello there.", { voice: $("voice-select").value });
+  const warmMs = now() - w0;
+
+  $("env-note").textContent = `Loaded in ${fmt(loadMs)}, warmed up in ${fmt(warmMs)} · ` +
+    `${self.crossOriginIsolated ? `multithreaded CPU (${ort.env.wasm.numThreads} threads)` : "single-threaded CPU"} · ` +
+    `STT encoder on ${asr.device} · LLM on ${llmInfo.device} (${llmInfo.dtype}) · TTS on ${ttsInfo.device} (${ttsInfo.dtype})`;
+  $("btn-talk").disabled = false; $("btn-test").disabled = false;
+  $("btn-load").textContent = "Models loaded";
+  if (asr.device === "wasm") $("env-note").textContent += " · No WebGPU in this browser, so everything runs on the CPU: expect 10–20 s per reply.";
+  setStatus("idle", "Ready");
+  return { loadMs, warmMs, isolated: self.crossOriginIsolated, threads: ort.env.wasm.numThreads, asr: asr.device, llm: llmInfo, tts: ttsInfo };
+}
+
+$("btn-load").onclick = () => load().catch(showError);
+$("btn-talk").onclick = async () => {
+  if (listening) { stopMic(); $("btn-talk").textContent = "Start talking"; return; }
+  try { await playCtx.resume(); await startMic(); $("btn-talk").textContent = "Stop"; } catch (e) { showError(e); }
+};
+$("btn-test").onclick = async () => { await playCtx.resume(); runClip().catch(showError); };
+
+// Hooks for automated latency tests.
+window.agent = { load, runClip, results, startMic, transcribe, decodeTo16k };
+</script>
+</body>
+</html>
