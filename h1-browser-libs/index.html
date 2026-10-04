@@ -17,91 +17,65 @@
     }
   </script>
   <link rel="icon" href="data:,">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../assets/amber.css">
   <style>
-    :root {
-      --bg: #fbfbf9; --surface: #ffffff; --text: #1c1c1a; --muted: #6b6b66; --line: #e6e5e0;
-      --accent: #c2410c; --tag-bg: #f1efe9;
-      --c-end: #a8a29e; --c-asr: #2563eb; --c-llm: #c2410c; --c-tts: #059669;
-    }
-    @media (prefers-color-scheme: dark) {
-      :root:not([data-theme="light"]) {
-        --bg: #141413; --surface: #1b1b1a; --text: #ececea; --muted: #9b9b95; --line: #2a2a28;
-        --accent: #fb923c; --tag-bg: #232321;
-        --c-end: #78716c; --c-asr: #60a5fa; --c-llm: #fb923c; --c-tts: #34d399;
-      }
-    }
-    * { box-sizing: border-box; }
-    body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 Inter, system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
-    main { max-width: 760px; margin: 0 auto; padding: 48px 16px 96px; }
-    a { color: inherit; text-decoration-color: var(--line); text-underline-offset: 3px; }
-    a:hover { color: var(--accent); text-decoration-color: currentColor; }
-    .mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
-    .back { font-size: 0.9rem; color: var(--muted); text-decoration: none; }
-    h1 { font-size: 1.9rem; font-weight: 600; letter-spacing: -0.02em; margin: 16px 0 4px; }
-    .lede { color: var(--muted); margin: 0 0 28px; }
-    h2 { font: 400 0.78rem/1 "JetBrains Mono", ui-monospace, monospace; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 40px 0 14px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+    :root { --c-end: #6f625a; --c-asr: #ffd8a8; --c-llm: #ff9d4d; --c-tts: #e2552e; }
+    .grain { animation: none; }   /* keep the GPU free for the models on this page */
+    h2 { counter-increment: ch; font: 400 .72rem/1 var(--mono); text-transform: uppercase; letter-spacing: .32em; color: var(--text);
+         margin: 64px 0 18px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+    h2::before { content: "CH" counter(ch) "  ·  "; color: var(--accent); }
 
     .stack { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-    .stage { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px; min-width: 0; }
-    .stage .k { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
-    .stage .name { font-weight: 600; font-size: 0.95rem; margin-top: 2px; }
-    .stage .det { font-size: 0.8rem; color: var(--muted); }
-    .bar { height: 4px; background: var(--tag-bg); border-radius: 2px; margin-top: 10px; overflow: hidden; }
-    .bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
-    .stage .st { font-size: 0.78rem; color: var(--muted); margin-top: 6px; overflow-wrap: anywhere; }
+    .stage { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; min-width: 0; }
+    .stage .k { font: 400 .66rem/1.5 var(--mono); text-transform: uppercase; letter-spacing: .16em; color: var(--accent); }
+    .stage .name { font-weight: 500; font-size: .98rem; margin-top: 4px; }
+    .stage .det { font-size: .8rem; color: var(--muted); }
+    .bar { height: 3px; background: var(--tag-bg); border-radius: 2px; margin-top: 12px; overflow: hidden; }
+    .bar > i { display: block; height: 100%; width: 0; background: var(--accent); box-shadow: 0 0 10px var(--accent); transition: width .2s; }
+    .stage .st { font-size: .78rem; color: var(--muted); margin-top: 6px; overflow-wrap: anywhere; }
 
-    .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 20px; }
-    button { font: inherit; font-size: 0.95rem; border: 1px solid var(--line); background: var(--surface); color: var(--text); padding: 9px 16px; border-radius: 8px; cursor: pointer; }
-    button.primary { background: var(--text); color: var(--bg); border-color: var(--text); font-weight: 500; }
-    button:disabled { opacity: .45; cursor: default; }
-    select { font: inherit; font-size: 0.85rem; background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
-    label.opt { font-size: 0.85rem; color: var(--muted); display: inline-flex; gap: 6px; align-items: center; }
-    .settings { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 14px; }
+    .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 22px; }
+    label.opt { font-size: .85rem; color: var(--muted); display: inline-flex; gap: 6px; align-items: center; }
+    .settings { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 16px; }
 
-    .status { display: flex; align-items: center; gap: 10px; margin-top: 22px; font-weight: 500; }
+    .status { display: flex; align-items: center; gap: 10px; margin-top: 24px; font-weight: 500; }
     .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--line); flex: none; }
-    .status[data-s="listening"] .dot { background: var(--c-tts); }
-    .status[data-s="hearing"] .dot { background: var(--c-tts); box-shadow: 0 0 0 4px color-mix(in srgb, var(--c-tts) 30%, transparent); }
+    .status[data-s="listening"] .dot { background: var(--c-asr); }
+    .status[data-s="hearing"] .dot { background: var(--c-asr); box-shadow: 0 0 0 4px color-mix(in srgb, var(--c-asr) 30%, transparent); }
     .status[data-s="transcribing"] .dot { background: var(--c-asr); }
     .status[data-s="thinking"] .dot { background: var(--c-llm); }
-    .status[data-s="speaking"] .dot { background: var(--c-llm); box-shadow: 0 0 0 4px color-mix(in srgb, var(--c-llm) 30%, transparent); }
-    .note { font-size: 0.85rem; color: var(--muted); margin-top: 8px; }
+    .status[data-s="speaking"] .dot { background: var(--c-tts); box-shadow: 0 0 0 4px color-mix(in srgb, var(--c-tts) 35%, transparent); }
+    .note { font-size: .85rem; color: var(--muted); margin-top: 8px; }
 
     .chat { display: flex; flex-direction: column; gap: 10px; }
-    .msg { max-width: 85%; padding: 8px 12px; border-radius: 10px; font-size: 0.95rem; }
+    .msg { max-width: 85%; padding: 9px 13px; border-radius: 10px; font-size: .95rem; }
     .msg.user { align-self: flex-end; background: var(--tag-bg); }
     .msg.agent { align-self: flex-start; background: var(--surface); border: 1px solid var(--line); }
-    .empty { color: var(--muted); font-size: 0.9rem; }
+    .empty { color: var(--muted); font-size: .9rem; }
 
-    .lat-total { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-    .lat-total .big { font-size: 2rem; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
-    .lat-total .lbl { color: var(--muted); font-size: 0.9rem; }
-    .lat-bar { display: flex; height: 22px; border-radius: 4px; overflow: hidden; margin: 12px 0 8px; gap: 2px; }
+    .lat-total { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+    .lat-total .big { font-size: 2.4rem; font-weight: 400; letter-spacing: -0.03em; color: #fff3e6; font-variant-numeric: tabular-nums; }
+    .lat-total .lbl { color: var(--muted); font-size: .9rem; }
+    .lat-bar { display: flex; height: 18px; border-radius: 3px; overflow: hidden; margin: 14px 0 10px; gap: 2px; }
     .lat-bar > div { min-width: 2px; }
-    .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.82rem; color: var(--muted); }
+    .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: .82rem; color: var(--muted); }
     .legend span::before { content: ""; display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; background: var(--c); vertical-align: 0; }
-    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-top: 16px; font-variant-numeric: tabular-nums; }
-    th, td { text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+    table { margin-top: 16px; font-size: .85rem; }
+    th, td { text-align: right; white-space: nowrap; }
     th:first-child, td:first-child { text-align: left; }
-    th { font-weight: 500; color: var(--muted); }
-    .scroll { overflow-x: auto; }
-    .credits { font-size: 0.82rem; color: var(--muted); }
+    .credits { font-size: .85rem; color: var(--muted); }
     .credits li { margin-bottom: 4px; }
-    .err { color: #dc2626; font-size: 0.9rem; margin-top: 10px; white-space: pre-wrap; }
+    .err { color: #ff7a5c; font-size: .9rem; margin-top: 10px; white-space: pre-wrap; }
 
-    @media (max-width: 600px) {
-      .stack { grid-template-columns: 1fr; }
-      main { padding-top: 32px; }
-    }
+    @media (max-width: 600px) { .stack { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
+<div class="grain" aria-hidden="true"></div>
 <main>
-  <a class="back" href="../">← e2e-browser-voice-agent · all hypotheses</a>
-  <h1>A voice agent in a browser tab</h1>
+  <nav class="crumbs"><a href="https://pedro1-21gw.github.io/">Pedro Benevenuto Valadares</a><span aria-hidden="true">/</span><a href="../">e2e-browser-voice-agent</a><span aria-hidden="true">/</span><span>H1 demo</span></nav>
+  <h1 class="page-title">A voice agent in a browser tab</h1>
+  <p class="kicker">Hypothesis 1 · browser libraries + cache</p>
   <p class="lede">Speech recognition, a language model and speech synthesis, all running on your own device. No server, no API keys; your audio never leaves the browser. Works best in a recent Chrome or Edge on a computer with a GPU.</p>
 
   <div class="stack">

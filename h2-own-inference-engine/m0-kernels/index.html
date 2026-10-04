@@ -5,26 +5,23 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>H2 M0 Kernel Lab</title>
 <link rel="icon" href="data:,">
+<link rel="stylesheet" href="../../assets/amber.css">
 <style>
-  :root { --bg: #fbfbf9; --text: #1c1c1a; --muted: #6b6b66; --line: #e6e5e0; }
-  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #141413; --text: #ececea; --muted: #9b9b95; --line: #2a2a28; } }
-  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  main { max-width: 900px; margin: 0 auto; padding: 32px 16px 64px; }
-  h1 { font-size: 1.5rem; margin: 0 0 4px; }
-  p { color: var(--muted); }
-  button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--text); color: var(--bg); cursor: pointer; }
-  .scroll { overflow-x: auto; }
-  table { border-collapse: collapse; width: 100%; margin-top: 16px; font-variant-numeric: tabular-nums; font-size: .9rem; }
-  th, td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+  main { max-width: 900px; }
+  table { margin-top: 22px; }
+  th, td { text-align: right; white-space: nowrap; }
   th:first-child, td:first-child { text-align: left; }
-  th { color: var(--muted); font-weight: 500; }
+  #info { color: var(--muted); font-size: .85rem; margin-top: 14px; }
 </style>
 </head>
 <body>
+<div class="grain" aria-hidden="true"></div>
 <main>
-  <h1>M0 kernel lab</h1>
-  <p>Hand-written WebGPU kernels for the operation that dominates every model in the voice agent: multiplying by a weight matrix. Each kernel is checked against a plain-JavaScript reference and timed. No ML libraries.</p>
-  <button id="run">Run all</button>
+  <nav class="crumbs"><a href="https://pedro1-21gw.github.io/">Pedro Benevenuto Valadares</a><span aria-hidden="true">/</span><a href="../../">e2e-browser-voice-agent</a><span aria-hidden="true">/</span><span>H2 kernel lab</span></nav>
+  <h1 class="page-title">Kernel lab</h1>
+  <p class="kicker">Hypothesis 2 · milestone 0</p>
+  <p class="lede">Hand-written WebGPU kernels for the operation that dominates every model in the voice agent: multiplying by a weight matrix. Each kernel is checked against a plain-JavaScript reference and timed. No ML libraries. Needs WebGPU (recent Chrome or Edge); takes about a minute.</p>
+  <button class="primary" id="run">Run all</button>
   <div class="scroll"><table><thead><tr><th>Kernel</th><th>Shape</th><th>Weights</th><th>Time / call</th><th>Throughput</th><th>Max error</th></tr></thead><tbody id="rows"></tbody></table></div>
   <p id="info"></p>
 </main>

@@ -13,7 +13,7 @@ working build, measurements, and a verdict. Later hypotheses build on what the e
 
 ## Learn how it works
 
-The [wiki](wiki/Home.md) explains every piece in plain language, with box-and-arrow diagrams and the real
+The [wiki](https://pedro1-21gw.github.io/e2e-browser-voice-agent/wiki/) explains every piece in plain language, with box-and-arrow diagrams and the real
 numbers from the experiments. Start at [wiki/Home.md](wiki/Home.md).
 
 ## How each hypothesis is written up

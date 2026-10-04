@@ -4,56 +4,72 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Browser Voice Agent Lab</title>
-  <meta name="description" content="Hypotheses and experiments for a voice agent that runs entirely in the browser.">
+  <meta name="description" content="Hypotheses and experiments for a voice agent that runs (almost) entirely in the browser.">
   <link rel="icon" href="data:,">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/amber.css">
   <style>
-    :root { --bg: #fbfbf9; --surface: #fff; --text: #1c1c1a; --muted: #6b6b66; --line: #e6e5e0; --accent: #c2410c; --ok: #059669; --wip: #2563eb; }
-    @media (prefers-color-scheme: dark) {
-      :root:not([data-theme="light"]) { --bg: #141413; --surface: #1b1b1a; --text: #ececea; --muted: #9b9b95; --line: #2a2a28; --accent: #fb923c; --ok: #34d399; --wip: #60a5fa; }
-    }
-    * { box-sizing: border-box; }
-    body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 Inter, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
-    main { max-width: 720px; margin: 0 auto; padding: 56px 16px 96px; }
-    a { color: inherit; text-underline-offset: 3px; text-decoration-color: var(--line); }
-    a:hover { color: var(--accent); text-decoration-color: currentColor; }
-    h1 { font-size: 1.9rem; font-weight: 600; letter-spacing: -0.02em; margin: 0 0 6px; }
-    .lede { color: var(--muted); margin: 0 0 32px; }
-    .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; margin-bottom: 14px; }
-    .tag { font: 400 0.75rem/1 "JetBrains Mono", monospace; text-transform: uppercase; letter-spacing: .06em; }
-    .tag.ok { color: var(--ok); } .tag.wip { color: var(--wip); }
-    .card h2 { font-size: 1.05rem; font-weight: 600; margin: 8px 0 6px; }
-    .card p { margin: 0 0 10px; color: var(--muted); font-size: .95rem; }
-    .links { display: flex; gap: 18px; flex-wrap: wrap; font-size: .92rem; }
-    footer { margin-top: 48px; color: var(--muted); font-size: .85rem; }
+    #spectrogram { display: block; width: 100%; height: 96px; margin: 4px 0 28px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+    .hyps { display: grid; gap: 14px; }
+    .card h3 { font: 500 1.15rem/1.35 var(--sans); color: #fff3e6; margin: 10px 0 8px; }
+    .card p { margin: 0 0 14px; color: var(--soft); font-size: .95rem; }
+    .card .links { display: flex; flex-wrap: wrap; gap: 6px 20px; font-size: .9rem; }
+    .card .links a { color: var(--accent); }
+    .tag.wip { color: #ffd8a8; }
+    .wiki { columns: 2; column-gap: 32px; padding: 0; margin: 0; list-style: none; }
+    .wiki li { break-inside: avoid; padding: 7px 0; border-bottom: 1px solid var(--line); }
+    .wiki a { text-decoration: none; display: flex; gap: 12px; }
+    .wiki .n { font: .75rem/1.9 var(--mono); color: var(--accent); width: 18px; flex: none; }
+    .wiki .q { color: var(--muted); font-size: .85rem; display: block; }
+    .src { color: var(--soft); }
+    @media (max-width: 600px) { .wiki { columns: 1; } #spectrogram { height: 80px; } }
   </style>
 </head>
 <body>
+<div class="grain" aria-hidden="true"></div>
 <main>
-  <h1>Browser voice agent lab</h1>
-  <p class="lede">Can a voice agent (listen, think, speak) run entirely inside a browser tab, fast enough to hold a conversation? Each question below is a hypothesis with a working build and measurements.</p>
+  <nav class="crumbs"><a href="https://pedro1-21gw.github.io/">Pedro Benevenuto Valadares</a><span aria-hidden="true">/</span><span>e2e-browser-voice-agent</span></nav>
 
-  <div class="card">
-    <span class="tag ok">H1 · confirmed with WebGPU</span>
-    <h2>Can a single HTML file, using existing browser ML libraries and the browser cache, make a voice agent with low latency?</h2>
-    <p>Yes on a GPU: 1.4–2.1 s from the end of your speech to the agent's first sound, on a laptop with a GTX 1050. Without WebGPU it still works, but takes 12–18 s.</p>
-    <div class="links"><a href="h1-browser-libs/">Try the demo →</a><a href="https://github.com/Pedro1-21GW/e2e-browser-voice-agent/tree/main/h1-browser-libs">Write-up and code</a></div>
+  <h1 class="page-title">Browser voice agent lab</h1>
+  <p class="kicker">Voice AI under hardware constraints</p>
+  <canvas id="spectrogram" aria-hidden="true"></canvas>
+  <p class="lede">Can a voice agent that listens, thinks and speaks run (almost) entirely inside a browser tab, fast enough to hold a conversation? Each question below is a hypothesis with a working build, measurements and a verdict.</p>
+
+  <h2 class="ch">Hypotheses</h2>
+  <div class="hyps">
+    <div class="card">
+      <span class="tag">H1 · confirmed with WebGPU</span>
+      <h3>Can a single HTML file, using existing browser ML libraries and the browser cache, make a voice agent with low latency?</h3>
+      <p>Yes on a GPU: 1.4–2.1 s from the end of your speech to the agent's first sound, on a laptop with a GTX 1050 notebook GPU. Without WebGPU it still works, but takes 12–18 s.</p>
+      <div class="links"><a href="h1-browser-libs/">Try the demo →</a><a href="wiki/?doc=h1-browser-libs/README.md">Write-up</a><a href="https://github.com/Pedro1-21GW/e2e-browser-voice-agent/tree/main/h1-browser-libs">Code</a></div>
+    </div>
+    <div class="card">
+      <span class="tag wip">H2 · in progress</span>
+      <h3>Can we write the inference engine ourselves and still run it all in one HTML file?</h3>
+      <p>Replacing the libraries with hand-written WebGPU kernels, one piece at a time, checked for correctness against a reference and for speed against H1. The first kernels are correct; the fastest reaches 60% of the GPU's memory bandwidth.</p>
+      <div class="links"><a href="h2-own-inference-engine/m0-kernels/">Kernel lab →</a><a href="wiki/?doc=h2-own-inference-engine/README.md">Plan and log</a><a href="https://github.com/Pedro1-21GW/e2e-browser-voice-agent/tree/main/h2-own-inference-engine">Code</a></div>
+    </div>
   </div>
 
-  <div class="card">
-    <span class="tag wip">H2 · in progress</span>
-    <h2>Can we write the inference engine ourselves and still run it all in one HTML file?</h2>
-    <p>Replace the libraries one piece at a time with hand-written WebGPU kernels, checking correctness against a reference and speed against H1.</p>
-    <div class="links"><a href="https://github.com/Pedro1-21GW/e2e-browser-voice-agent/tree/main/h2-own-inference-engine">Plan and progress</a></div>
-  </div>
+  <h2 class="ch">Learn how it works</h2>
+  <ul class="wiki">
+    <li><a href="wiki/?p=01-big-picture"><span class="n">01</span><span>The big picture<span class="q">What are the pieces and how do they connect?</span></span></a></li>
+    <li><a href="wiki/?p=02-listening-vad"><span class="n">02</span><span>Listening<span class="q">How does it know you stopped talking?</span></span></a></li>
+    <li><a href="wiki/?p=03-speech-to-text"><span class="n">03</span><span>Speech to text<span class="q">How does sound become words?</span></span></a></li>
+    <li><a href="wiki/?p=04-language-model"><span class="n">04</span><span>The language model<span class="q">How does it write the reply?</span></span></a></li>
+    <li><a href="wiki/?p=05-text-to-speech"><span class="n">05</span><span>Text to speech<span class="q">How do words become a voice?</span></span></a></li>
+    <li><a href="wiki/?p=06-browser-as-a-computer"><span class="n">06</span><span>The browser as a computer<span class="q">WebAssembly, WebGPU, threads, caches</span></span></a></li>
+    <li><a href="wiki/?p=07-latency-tricks"><span class="n">07</span><span>Latency tricks<span class="q">Why ~2 s instead of ~5 s</span></span></a></li>
+    <li><a href="wiki/?p=08-gpu-kernels"><span class="n">08</span><span>GPU kernels<span class="q">What H2 is building</span></span></a></li>
+  </ul>
 
-  <footer>
-    <a href="https://github.com/Pedro1-21GW/e2e-browser-voice-agent">Source on GitHub</a> ·
-    <a href="https://github.com/Pedro1-21GW/e2e-browser-voice-agent/tree/main/wiki">Wiki: how it all works</a> ·
-    <a href="https://pedro1-21gw.github.io">Pedro Benevenuto Valadares</a>
-  </footer>
+  <h2 class="ch">Source</h2>
+  <p class="src">Everything is on <a href="https://github.com/Pedro1-21GW/e2e-browser-voice-agent">GitHub</a> under the MIT license, including the scripts that produced every number. The models are downloaded from Hugging Face and keep their own licenses (see the <a href="wiki/?doc=README.md">README</a>).</p>
+
+  <footer>Part of <a href="https://pedro1-21gw.github.io/">Pedro Benevenuto Valadares</a>'s projects.</footer>
 </main>
+<script type="module">
+  import { startSpectrogram } from "./assets/spectrogram.js";
+  startSpectrogram(document.getElementById("spectrogram"));
+</script>
 </body>
 </html>

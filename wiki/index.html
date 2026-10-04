@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Voice Agent Wiki</title>
+  <meta name="description" content="Plain-language explanations of how a voice agent runs inside a browser tab.">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../assets/amber.css">
+  <style>
+    .pages { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 40px; padding: 0; list-style: none; }
+    .pages a { display: block; padding: 5px 11px; border: 1px solid var(--line); border-radius: 999px; font-size: .82rem; color: var(--muted); text-decoration: none; }
+    .pages a:hover { color: var(--accent); border-color: var(--accent); }
+    .pages a[aria-current="page"] { color: #1a0f07; background: var(--accent); border-color: var(--accent); }
+
+    /* rendered markdown */
+    .md { font-size: 1rem; }
+    .md h1 { font: 400 2.5rem/1.1 var(--sans); letter-spacing: -0.03em; color: #fff3e6; margin: 0 0 22px; }
+    .md h2 { counter-increment: ch; font: 400 .72rem/1 var(--mono); text-transform: uppercase; letter-spacing: .3em; color: var(--text);
+             margin: 56px 0 18px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+    .md h2::before { content: "CH" counter(ch) "  ·  "; color: var(--accent); }
+    .md h3 { font: 500 1.1rem/1.4 var(--sans); margin: 32px 0 10px; color: #fff3e6; }
+    .md p, .md li { color: var(--soft); }
+    .md strong { color: var(--text); font-weight: 600; }
+    .md ul, .md ol { padding-left: 22px; }
+    .md li { margin: 4px 0; }
+    .md blockquote { margin: 18px 0; padding: 4px 18px; border-left: 2px solid var(--accent); color: var(--soft); background: var(--tag-bg); border-radius: 0 8px 8px 0; }
+    .md code { font: .86em var(--mono); background: var(--tag-bg); padding: 1px 5px; border-radius: 4px; }
+    .md pre { margin: 18px 0; padding: 16px 18px; background: rgba(0, 0, 0, .35); border: 1px solid var(--line); border-radius: 10px; overflow-x: auto; line-height: 1.45; }
+    .md pre code { background: none; padding: 0; font-size: .8rem; color: #f3d9bf; }
+    .md table { margin: 18px 0; display: block; overflow-x: auto; }
+    .md th { color: var(--accent); font: 400 .72rem/1.4 var(--mono); text-transform: uppercase; letter-spacing: .1em; }
+    .md td { color: var(--soft); }
+    .md hr { border: 0; border-top: 1px solid var(--line); margin: 40px 0; }
+    .pager { display: flex; justify-content: space-between; gap: 12px; margin-top: 64px; font-size: .9rem; }
+    .pager a { text-decoration: none; color: var(--muted); }
+    .pager a:hover { color: var(--accent); }
+    .loading { color: var(--muted); }
+  </style>
+</head>
+<body>
+<div class="grain" aria-hidden="true"></div>
+<main>
+  <nav class="crumbs"><a href="https://pedro1-21gw.github.io/">Pedro Benevenuto Valadares</a><span aria-hidden="true">/</span><a href="../">e2e-browser-voice-agent</a><span aria-hidden="true">/</span><span id="crumb">Wiki</span></nav>
+  <ul class="pages" id="pages"></ul>
+  <article class="md" id="doc"><p class="loading">Loading…</p></article>
+  <nav class="pager" id="pager"></nav>
+  <footer>The same pages are plain Markdown in the <a href="https://github.com/Pedro1-21GW/e2e-browser-voice-agent/tree/main/wiki">repository</a>.</footer>
+</main>
+
+<script type="module">
+// Renders the repository's Markdown files in the site's style.
+//   ?p=01-big-picture             → wiki/01-big-picture.md
+//   ?doc=h1-browser-libs/README.md → any Markdown file in the repository (write-ups)
+import { marked } from "https://cdn.jsdelivr.net/npm/marked@18.0.14/lib/marked.esm.js";
+
+const REPO = "https://github.com/Pedro1-21GW/e2e-browser-voice-agent";
+const PAGES = [
+  ["Home", "Home"], ["01-big-picture", "1 · Big picture"], ["02-listening-vad", "2 · Listening"],
+  ["03-speech-to-text", "3 · Speech to text"], ["04-language-model", "4 · Language model"],
+  ["05-text-to-speech", "5 · Text to speech"], ["06-browser-as-a-computer", "6 · Browser as a computer"],
+  ["07-latency-tricks", "7 · Latency tricks"], ["08-gpu-kernels", "8 · GPU kernels"], ["glossary", "Glossary"],
+];
+
+const q = new URLSearchParams(location.search);
+const safe = (path) => /^[\w./-]+\.md$/.test(path) && !path.includes("..");
+let docPath = q.get("doc");
+if (!docPath || !safe(docPath)) {
+  const p = PAGES.some(([id]) => id === q.get("p")) ? q.get("p") : "Home";
+  docPath = `wiki/${p}.md`;
+}
+const pageId = docPath.startsWith("wiki/") ? docPath.slice(5, -3) : null;
+
+document.getElementById("pages").innerHTML = PAGES.map(([id, label]) =>
+  `<li><a href="?p=${id}"${id === pageId ? ' aria-current="page"' : ""}>${label}</a></li>`).join("");
+
+// Map a link inside a document to where it should go on the site.
+function route(href) {
+  if (/^(https?:|mailto:|#)/.test(href)) return href;
+  const url = new URL(href, "https://repo.local/" + docPath);          // resolve relative to the current file
+  const path = url.pathname.slice(1);
+  if (path.endsWith(".md")) return path.startsWith("wiki/") && !path.slice(5).includes("/") ? `?p=${path.slice(5, -3)}` : `?doc=${path}`;
+  if (path.endsWith(".html") || path.endsWith("/")) return "../" + path;   // live pages (demo, kernel lab)
+  return `${REPO}/blob/main/${path}`;                                    // code and data files: view on GitHub
+}
+
+try {
+  const res = await fetch("../" + docPath);
+  if (!res.ok) throw new Error(res.status);
+  const article = document.getElementById("doc");
+  article.innerHTML = marked.parse(await res.text());
+  article.querySelectorAll("a[href]").forEach((a) => { a.href = route(a.getAttribute("href")); });
+  const h1 = article.querySelector("h1");
+  document.title = (h1 ? h1.textContent + " · " : "") + "Voice Agent Wiki";
+  document.getElementById("crumb").textContent = pageId ? "Wiki" : docPath.split("/")[0];
+  if (pageId) {
+    const i = PAGES.findIndex(([id]) => id === pageId);
+    const prev = PAGES[i - 1], next = PAGES[i + 1];
+    document.getElementById("pager").innerHTML =
+      (prev ? `<a href="?p=${prev[0]}">← ${prev[1]}</a>` : "<span></span>") + (next ? `<a href="?p=${next[0]}">${next[1]} →</a>` : "");
+  }
+} catch (e) {
+  document.getElementById("doc").innerHTML = `<p>Couldn't load <code>${docPath}</code>. <a href="${REPO}/blob/main/${docPath}">Read it on GitHub</a>.</p>`;
+}
+</script>
+</body>
+</html>
