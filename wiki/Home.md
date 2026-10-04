@@ -20,6 +20,7 @@ answering out loud. Every page follows the same recipe (the Feynman method):
 | 5 | [Text to speech: Kokoro](05-text-to-speech.md) | How do words become a voice? |
 | 6 | [The browser as a computer](06-browser-as-a-computer.md) | WebAssembly, WebGPU, threads, caches: what are they? |
 | 7 | [Latency tricks](07-latency-tricks.md) | Why it answers in ~2 s instead of ~5 s |
+| 8 | [GPU kernels (H2)](08-gpu-kernels.md) | What does "writing our own engine" actually mean? |
 | – | [Glossary](glossary.md) | Every term in one line |
 
 ## The whole thing in one paragraph

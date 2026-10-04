@@ -89,4 +89,47 @@ That gap is the opportunity H2 is betting on.
 
 ## Log
 
-Results are added here as milestones are run.
+### M0, round 1: first kernels ([m0-kernels/](m0-kernels/index.html))
+
+Six hand-written WebGPU kernels, each checked against a plain-JavaScript reference on random data, timed over
+50–200 back-to-back calls. Run with `python h2-own-inference-engine/m0-kernels/run.py`.
+
+**All kernels are correct**: relative error 1e-7 (matrix-vector) and 1e-6 (matrix-matrix), i.e. float rounding.
+
+**Matrix × vector** (one token through one layer, the LLM decode case). Best thread count per row shown:
+
+| Weights | Shape | Weight bytes | Time | Weight bandwidth |
+|---|---|---|---|---|
+| fp32 | 4096×1024 | 16.8 MB | 0.25 ms | 61–67 GB/s (55–60% of the 112 GB/s limit) |
+| 4-bit | 4096×1024 | 2.6 MB | 0.11–0.12 ms | 21–24 GB/s |
+| ternary (2-bit) | 4096×1024 | 1.2 MB | 0.13–0.15 ms | 8–9 GB/s |
+| empty kernel | 4096 workgroups | – | **0.024 ms** | (overhead floor) |
+
+**Matrix × matrix** (many positions at once: the speech encoder and LLM prefill), 80×1024 · 1024×4096:
+
+| Kernel | Time | Speed | Share of the GTX 1050's ~1.9 TFLOP/s |
+|---|---|---|---|
+| naive (one thread per output, all reads from memory) | 21.7 ms | 31 GFLOP/s | 2% |
+| tiled 16×16 (shared-memory tiles) | 5.2 ms | 128 GFLOP/s | 7% |
+| tiled + 4×4 outputs per thread | 8.3 ms (5.2 ms at 256 rows: 135 GFLOP/s) | 81 GFLOP/s | 4% |
+
+**What we learned**
+
+1. **Matching threads to work matters.** With 256 threads per row, a 4-bit row of 1,024 values has only 128
+   packed words, so half the threads sit idle; 32 threads per row cut the 4-bit time from 0.21 to 0.11 ms.
+2. **A wrong guess, corrected by measurement.** The quantized kernels stopped improving at ~0.12 ms, which
+   looked like fixed per-call overhead. An empty kernel costs only 0.008–0.024 ms, so that's not it.
+   The actual cost: every row re-reads the whole input vector. For 4096 rows × 1024 inputs that's 16.8 MB of
+   (cached) reads, as much as the entire fp32 weight matrix. Compressing the weights 6–14× can't help much while
+   the input reads stay the same size.
+3. **Tiling gives 4× on matrix-matrix, but we're at 7% of peak.** By a rough estimate, the speech encoder does
+   ~90 GFLOP for a 6 s clip (≈2 × 0.6 B weights × 76 positions), and H1's ONNX Runtime does it in ~180 ms,
+   i.e. ~500 GFLOP/s. Our best matmul would need ~0.7 s. There's a ~4× gap to close.
+4. The 4×4-per-thread version loses at 80 rows: its 64-row tiles waste 48 of 128 computed rows, and there are
+   too few workgroups to keep the GPU busy. Kernel shape has to fit the problem shape.
+
+**Next (M0, round 2)**
+- Matrix × vector: load the input once into shared memory and compute several rows per workgroup.
+- Matrix × matrix: vector (vec4) loads, bigger K tiles, a tile shape that fits 76–80 rows, then fused
+  dequantization so 4-bit and ternary weights are unpacked while loading the tile.
+- Then RMSNorm / LayerNorm, softmax, RoPE and attention, which M1 (the LLM) needs.

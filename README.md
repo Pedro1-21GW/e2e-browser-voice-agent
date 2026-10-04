@@ -9,7 +9,7 @@ working build, measurements, and a verdict. Later hypotheses build on what the e
 | # | Hypothesis | Status | Try it | Write-up |
 |---|---|---|---|---|
 | **H1** | Can a single HTML file, using existing browser ML libraries and the browser cache, make a voice agent with low latency? | ✅ **Confirmed with WebGPU**: 1.4–2.1 s from the end of speech to the agent's first sound, on a laptop with a GTX 1050. ❌ **Not without WebGPU**: 12–18 s. | [demo](https://pedro1-21gw.github.io/e2e-browser-voice-agent/h1-browser-libs/) | [h1-browser-libs/README.md](h1-browser-libs/README.md) |
-| **H2** | Can we write the inference engine ourselves (our own GPU kernels) and still run it all in one HTML file? | 🔬 Started | – | [h2-own-inference-engine/README.md](h2-own-inference-engine/README.md) |
+| **H2** | Can we write the inference engine ourselves (our own GPU kernels) and still run it all in one HTML file? | 🔬 Started: first hand-written WebGPU kernels are correct; fp32 matrix-vector at 60% of memory bandwidth, matrix-matrix at 7% of peak (next: close the gap) | [kernel lab](https://pedro1-21gw.github.io/e2e-browser-voice-agent/h2-own-inference-engine/m0-kernels/) | [h2-own-inference-engine/README.md](h2-own-inference-engine/README.md) |
 
 ## Learn how it works
 
