@@ -16,9 +16,9 @@
     /* rendered markdown */
     .md { font-size: 1rem; }
     .md h1 { font: 400 2.5rem/1.1 var(--sans); letter-spacing: -0.03em; color: #fff3e6; margin: 0 0 22px; }
-    .md h2 { counter-increment: ch; font: 400 .72rem/1 var(--mono); text-transform: uppercase; letter-spacing: .3em; color: var(--text);
+    .md h2 { font: 400 .72rem/1 var(--mono); text-transform: uppercase; letter-spacing: .3em; color: var(--text);
              margin: 56px 0 18px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
-    .md h2::before { content: "CH" counter(ch) "  ·  "; color: var(--accent); }
+    .md h2::before { content: ""; display: inline-block; width: 18px; height: 1px; background: var(--accent); vertical-align: middle; margin-right: 12px; }
     .md h3 { font: 500 1.1rem/1.4 var(--sans); margin: 32px 0 10px; color: #fff3e6; }
     .md p, .md li { color: var(--soft); }
     .md strong { color: var(--text); font-weight: 600; }
@@ -79,6 +79,7 @@ function route(href) {
   if (/^(https?:|mailto:|#)/.test(href)) return href;
   const url = new URL(href, "https://repo.local/" + docPath);          // resolve relative to the current file
   const path = url.pathname.slice(1);
+  if (path.startsWith(".")) return `${REPO}/blob/main/${path}`;            // GitHub Pages doesn't publish dot-folders
   if (path.endsWith(".md")) return path.startsWith("wiki/") && !path.slice(5).includes("/") ? `?p=${path.slice(5, -3)}` : `?doc=${path}`;
   if (path.endsWith(".html") || path.endsWith("/")) return "../" + path;   // live pages (demo, kernel lab)
   return `${REPO}/blob/main/${path}`;                                    // code and data files: view on GitHub

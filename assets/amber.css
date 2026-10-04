@@ -37,9 +37,9 @@ a:hover { color: var(--accent); text-decoration-color: currentColor; }
 .page-title { font: 400 3rem/1.05 var(--sans); letter-spacing: -0.035em; color: #fff3e6; margin: 0; }
 .kicker { font: 400 .74rem/1.7 var(--mono); text-transform: uppercase; letter-spacing: .26em; color: var(--accent); margin: 14px 0 22px; }
 .lede { font-size: 1.05rem; font-weight: 300; color: var(--soft); max-width: 660px; margin: 0 0 24px; }
-.ch { counter-increment: ch; font: 400 .72rem/1 var(--mono); text-transform: uppercase; letter-spacing: .32em; color: var(--text);
+.ch { font: 400 .72rem/1 var(--mono); text-transform: uppercase; letter-spacing: .32em; color: var(--text);
       margin: 72px 0 22px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
-.ch::before { content: "CH" counter(ch) "  ·  "; color: var(--accent); }
+.ch::before { content: ""; display: inline-block; width: 18px; height: 1px; background: var(--accent); vertical-align: middle; margin-right: 12px; }
 
 /* cards, tags, buttons */
 .card { display: block; padding: 18px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); transition: border-color .2s, box-shadow .2s; }

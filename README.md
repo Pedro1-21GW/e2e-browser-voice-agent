@@ -1,6 +1,6 @@
 # e2e-browser-voice-agent
 
-An end-to-end voice agent (listen → understand → reply → speak) that runs **entirely inside a browser tab**:
+An end-to-end voice agent (listen → understand → reply → speak) that runs **(almost) entirely inside a browser tab**:
 no server, no API keys, the user's audio never leaves their device.
 
 The repository is organized as a series of **hypotheses**. Each one is a question that gets a folder, a
@@ -8,13 +8,17 @@ working build, measurements, and a verdict. Later hypotheses build on what the e
 
 | # | Hypothesis | Status | Try it | Write-up |
 |---|---|---|---|---|
-| **H1** | Can a single HTML file, using existing browser ML libraries and the browser cache, make a voice agent with low latency? | ✅ **Confirmed with WebGPU**: 1.4–2.1 s from the end of speech to the agent's first sound, on a laptop with a GTX 1050. ❌ **Not without WebGPU**: 12–18 s. | [demo](https://pedro1-21gw.github.io/e2e-browser-voice-agent/h1-browser-libs/) | [h1-browser-libs/README.md](h1-browser-libs/README.md) |
-| **H2** | Can we write the inference engine ourselves (our own GPU kernels) and still run it all in one HTML file? | 🔬 Started: first hand-written WebGPU kernels are correct; fp32 matrix-vector at 60% of memory bandwidth, matrix-matrix at 7% of peak (next: close the gap) | [kernel lab](https://pedro1-21gw.github.io/e2e-browser-voice-agent/h2-own-inference-engine/m0-kernels/) | [h2-own-inference-engine/README.md](h2-own-inference-engine/README.md) |
+| **Hypo 1** | Can a single HTML file, using existing browser ML libraries and the browser cache, make a voice agent with low latency? | ✅ **Confirmed with WebGPU**: 1.4–2.1 s from the end of speech to the agent's first sound, on a laptop with a GTX 1050. ❌ **Not without WebGPU**: 12–18 s. | [demo](https://pedro1-21gw.github.io/e2e-browser-voice-agent/h1-browser-libs/) | [h1-browser-libs/README.md](h1-browser-libs/README.md) |
+| **Hypo 2** | Can we write the inference engine ourselves (our own GPU kernels) and still run it all in one HTML file? | 🔬 Started: first hand-written WebGPU kernels are correct; fp32 matrix-vector at 60% of memory bandwidth, matrix-matrix at 7% of peak (next: close the gap) | [kernel lab](https://pedro1-21gw.github.io/e2e-browser-voice-agent/h2-own-inference-engine/m0-kernels/) | [h2-own-inference-engine/README.md](h2-own-inference-engine/README.md) |
 
-## Learn how it works
+## Learn as Feynman would explain it
 
 The [wiki](https://pedro1-21gw.github.io/e2e-browser-voice-agent/wiki/) explains every piece in plain language, with box-and-arrow diagrams and the real
 numbers from the experiments. Start at [wiki/Home.md](wiki/Home.md).
+
+The pages were written with the [feynman-explain](.claude/skills/feynman-explain/SKILL.md) skill, a short
+recipe for Claude Code: core idea first, one analogy, the real numbers, the surprising part, a one-line verdict.
+It lives in `.claude/skills/`, so Claude Code picks it up automatically in this repository.
 
 ## How each hypothesis is written up
 

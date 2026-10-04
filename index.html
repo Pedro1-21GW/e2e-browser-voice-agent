@@ -37,20 +37,20 @@
   <h2 class="ch">Hypotheses</h2>
   <div class="hyps">
     <div class="card">
-      <span class="tag">H1 · confirmed with WebGPU</span>
+      <span class="tag">Hypo 1 · confirmed with WebGPU</span>
       <h3>Can a single HTML file, using existing browser ML libraries and the browser cache, make a voice agent with low latency?</h3>
       <p>Yes on a GPU: 1.4–2.1 s from the end of your speech to the agent's first sound, on a laptop with a GTX 1050 notebook GPU. Without WebGPU it still works, but takes 12–18 s.</p>
       <div class="links"><a href="h1-browser-libs/">Try the demo →</a><a href="wiki/?doc=h1-browser-libs/README.md">Write-up</a><a href="https://github.com/Pedro1-21GW/e2e-browser-voice-agent/tree/main/h1-browser-libs">Code</a></div>
     </div>
     <div class="card">
-      <span class="tag wip">H2 · in progress</span>
+      <span class="tag wip">Hypo 2 · in progress</span>
       <h3>Can we write the inference engine ourselves and still run it all in one HTML file?</h3>
-      <p>Replacing the libraries with hand-written WebGPU kernels, one piece at a time, checked for correctness against a reference and for speed against H1. The first kernels are correct; the fastest reaches 60% of the GPU's memory bandwidth.</p>
+      <p>Replacing the libraries with hand-written WebGPU kernels, one piece at a time, checked for correctness against a reference and for speed against Hypo 1. The first kernels are correct; the fastest reaches 60% of the GPU's memory bandwidth.</p>
       <div class="links"><a href="h2-own-inference-engine/m0-kernels/">Kernel lab →</a><a href="wiki/?doc=h2-own-inference-engine/README.md">Plan and log</a><a href="https://github.com/Pedro1-21GW/e2e-browser-voice-agent/tree/main/h2-own-inference-engine">Code</a></div>
     </div>
   </div>
 
-  <h2 class="ch">Learn how it works</h2>
+  <h2 class="ch">Learn as Feynman would explain it</h2>
   <ul class="wiki">
     <li><a href="wiki/?p=01-big-picture"><span class="n">01</span><span>The big picture<span class="q">What are the pieces and how do they connect?</span></span></a></li>
     <li><a href="wiki/?p=02-listening-vad"><span class="n">02</span><span>Listening<span class="q">How does it know you stopped talking?</span></span></a></li>
@@ -59,7 +59,7 @@
     <li><a href="wiki/?p=05-text-to-speech"><span class="n">05</span><span>Text to speech<span class="q">How do words become a voice?</span></span></a></li>
     <li><a href="wiki/?p=06-browser-as-a-computer"><span class="n">06</span><span>The browser as a computer<span class="q">WebAssembly, WebGPU, threads, caches</span></span></a></li>
     <li><a href="wiki/?p=07-latency-tricks"><span class="n">07</span><span>Latency tricks<span class="q">Why ~2 s instead of ~5 s</span></span></a></li>
-    <li><a href="wiki/?p=08-gpu-kernels"><span class="n">08</span><span>GPU kernels<span class="q">What H2 is building</span></span></a></li>
+    <li><a href="wiki/?p=08-gpu-kernels"><span class="n">08</span><span>GPU kernels<span class="q">What Hypo 2 is building</span></span></a></li>
   </ul>
 
   <h2 class="ch">Source</h2>

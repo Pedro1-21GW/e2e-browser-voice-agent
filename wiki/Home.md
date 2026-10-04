@@ -1,7 +1,8 @@
 # Wiki: how a voice agent fits in a browser tab
 
 This wiki explains, in plain language, everything that happens between you saying something and the agent
-answering out loud. Every page follows the same recipe (the Feynman method):
+answering out loud. Every page follows the same recipe (the Feynman method, written down as the
+[feynman-explain skill](../.claude/skills/feynman-explain/SKILL.md)):
 
 1. **The core idea first**, in one or two sentences with no jargon.
 2. **One analogy** that matches the real mechanism.

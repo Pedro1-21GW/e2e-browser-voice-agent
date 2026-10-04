@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Browser Voice Agent</title>
-  <meta name="description" content="A voice agent that runs speech recognition, a language model and speech synthesis entirely in your browser.">
+  <meta name="description" content="A voice agent that runs speech recognition, a language model and speech synthesis (almost) entirely in your browser.">
   <script>
     // Multithreaded WebAssembly needs cross-origin isolation; sw.js adds the headers.
     if (!window.crossOriginIsolated && "serviceWorker" in navigator) {
@@ -21,9 +21,9 @@
   <style>
     :root { --c-end: #6f625a; --c-asr: #ffd8a8; --c-llm: #ff9d4d; --c-tts: #e2552e; }
     .grain { animation: none; }   /* keep the GPU free for the models on this page */
-    h2 { counter-increment: ch; font: 400 .72rem/1 var(--mono); text-transform: uppercase; letter-spacing: .32em; color: var(--text);
+    h2 { font: 400 .72rem/1 var(--mono); text-transform: uppercase; letter-spacing: .32em; color: var(--text);
          margin: 64px 0 18px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
-    h2::before { content: "CH" counter(ch) "  ·  "; color: var(--accent); }
+    h2::before { content: ""; display: inline-block; width: 18px; height: 1px; background: var(--accent); vertical-align: middle; margin-right: 12px; }
 
     .stack { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
     .stage { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; min-width: 0; }
@@ -73,7 +73,7 @@
 <body>
 <div class="grain" aria-hidden="true"></div>
 <main>
-  <nav class="crumbs"><a href="https://pedro1-21gw.github.io/">Pedro Benevenuto Valadares</a><span aria-hidden="true">/</span><a href="../">e2e-browser-voice-agent</a><span aria-hidden="true">/</span><span>H1 demo</span></nav>
+  <nav class="crumbs"><a href="https://pedro1-21gw.github.io/">Pedro Benevenuto Valadares</a><span aria-hidden="true">/</span><a href="../">e2e-browser-voice-agent</a><span aria-hidden="true">/</span><span>Hypo 1 demo</span></nav>
   <h1 class="page-title">A voice agent in a browser tab</h1>
   <p class="kicker">Hypothesis 1 · browser libraries + cache</p>
   <p class="lede">Speech recognition, a language model and speech synthesis, all running on your own device. No server, no API keys; your audio never leaves the browser. Works best in a recent Chrome or Edge on a computer with a GPU.</p>
