@@ -5,6 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Browser Voice Agent</title>
   <meta name="description" content="A voice agent that runs speech recognition, a language model and speech synthesis (almost) entirely in your browser.">
+  <!-- One copy of each library: Transformers.js and kokoro-js import their dependencies by these names, and each
+       extra copy of ONNX Runtime costs ~115 MB or more of memory. path and fs are only used by kokoro-js on Node. -->
+  <script type="importmap">
+    { "imports": {
+      "onnxruntime-web/webgpu": "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.30.0/dist/ort.webgpu.min.mjs",
+      "onnxruntime-common": "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.30.0/dist/ort.webgpu.min.mjs",
+      "@huggingface/transformers": "https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.0/dist/transformers.web.js",
+      "phonemizer": "https://cdn.jsdelivr.net/npm/phonemizer@1.2.1/dist/phonemizer.js",
+      "path": "data:text/javascript,export default {}",
+      "fs/promises": "data:text/javascript,export default {}"
+    } }
+  </script>
   <script>
     // Multithreaded WebAssembly needs cross-origin isolation; sw.js adds the headers.
     if (!window.crossOriginIsolated && "serviceWorker" in navigator) {
@@ -76,13 +88,13 @@
   <nav class="crumbs"><a href="https://pedro1-21gw.github.io/">Pedro Benevenuto Valadares</a><span aria-hidden="true">/</span><a href="../">e2e-browser-voice-agent</a><span aria-hidden="true">/</span><span>Hypo 1 demo</span></nav>
   <h1 class="page-title">A voice agent in a browser tab</h1>
   <p class="kicker">Hypothesis 1 · browser libraries + cache</p>
-  <p class="lede">Speech recognition, a language model and speech synthesis, all running on your own device. No server, no API keys; your audio never leaves the browser. Works best in a recent Chrome or Edge on a computer with a GPU.</p>
+  <p class="lede">Speech recognition, a language model and speech synthesis, all running on your own device. No server, no API keys; your audio never leaves the browser. Works best in a recent Chrome or Edge on a computer with a GPU; on phones and browsers without WebGPU, the page picks a lighter version (you can change it below).</p>
 
   <div class="stack">
     <div class="stage" id="st-asr">
-      <div class="k">Speech to text · GPU + CPU</div>
-      <div class="name">Parakeet TDT 0.6B v3 (Redux)</div>
-      <div class="det">ternary encoder, 2-bit ONNX · 208 MB</div>
+      <div class="k">Speech to text · <span class="dev">GPU + CPU</span></div>
+      <div class="name" id="asr-name">Parakeet TDT 0.6B v3 (Redux)</div>
+      <div class="det" id="asr-det">ternary encoder, 2-bit ONNX · 208 MB</div>
       <div class="bar"><i></i></div><div class="st">not loaded</div>
     </div>
     <div class="stage" id="st-llm">
@@ -93,21 +105,28 @@
     </div>
     <div class="stage" id="st-tts">
       <div class="k">Text to speech · <span class="dev">GPU</span></div>
-      <div class="name">Kokoro 82M</div>
+      <div class="name" id="tts-name">Kokoro 82M</div>
       <div class="det" id="tts-det">fp32 · 325 MB</div>
       <div class="bar"><i></i></div><div class="st">not loaded</div>
     </div>
   </div>
 
   <div class="settings">
-    <label class="opt">Language model
+    <label class="opt">Version
+      <select id="profile-select">
+        <option value="normal">Normal (~830 MB, needs a GPU)</option>
+        <option value="lite">Lite (~290 MB, needs a GPU, English)</option>
+        <option value="superlite">Super-lite (~170 MB, CPU only, English)</option>
+      </select>
+    </label>
+    <label class="opt" id="llm-opt">Language model
       <select id="llm-select">
         <option value="lfm2-350m">LFM2 350M (293 MB)</option>
         <option value="lfm2-700m">LFM2 700M (559 MB)</option>
         <option value="qwen25-05b">Qwen2.5 0.5B Instruct (786 MB)</option>
       </select>
     </label>
-    <label class="opt">Voice
+    <label class="opt" id="voice-opt">Voice
       <select id="voice-select">
         <option value="af_heart">Heart (US)</option>
         <option value="af_bella">Bella (US)</option>
@@ -150,6 +169,7 @@
   <h2>How it works</h2>
   <p class="credits" style="font-size:.92rem">A voice activity detector (Silero VAD) listens to the microphone in 32 ms frames. After 160 ms of silence it starts transcribing speculatively; if the silence reaches 500 ms, that's the end of your turn and the transcript is usually already done. If you start talking again before the agent makes a sound, it treats the pause as mid-sentence and merges both parts.</p>
   <p class="credits" style="font-size:.92rem">Speech recognition is Parakeet, a transducer model whose encoder weights are all −1, 0 or +1. The encoder runs on the GPU through WebGPU; the token-and-duration decoding loop is hand-written and runs on the CPU in ONNX Runtime Web. The text goes to a small language model on the GPU that streams tokens, and as soon as the first sentence (or a long first clause) is complete, Kokoro synthesizes it while the model keeps writing the rest.</p>
+  <p class="credits" style="font-size:.92rem">The Lite and Super-lite versions are for phones: Moonshine tiny (English) replaces Parakeet, the device's own voice replaces Kokoro, and the language model is LFM2.5 350M on the GPU (Lite) or SmolLM2 135M on the CPU (Super-lite). They load one model at a time and keep about a third of the memory, because phone browsers reload a tab that uses too much.</p>
   <ul class="credits">
     <li>Speech to text: NVIDIA <a href="https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3">Parakeet TDT 0.6B v3</a> → Moondream <a href="https://huggingface.co/moondream/parakeet-redux">Parakeet Redux</a> → <a href="https://huggingface.co/Olicorne/parakeet-tdt-0.6b-v3-redux-onnx">ONNX export</a> (CC BY 4.0)</li>
     <li>Language model: Liquid AI <a href="https://huggingface.co/onnx-community/LFM2-350M-ONNX">LFM2</a> or Alibaba <a href="https://huggingface.co/onnx-community/Qwen2.5-0.5B-Instruct">Qwen2.5</a>, via <a href="https://github.com/huggingface/transformers.js">Transformers.js</a></li>
@@ -160,8 +180,16 @@
 
 <script type="module">
 import * as ort from "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.30.0/dist/ort.wasm.min.mjs";
-import { pipeline, TextStreamer, InterruptableStoppingCriteria } from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.0";
-import { KokoroTTS, TextSplitterStream } from "https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/dist/kokoro.web.js";
+// Transformers.js (and kokoro-js) import ONNX Runtime by name, and the import map in <head> points that name at
+// the WebGPU build this page uses anyway: one copy of the runtime for all models but Parakeet's preprocessor.
+import * as ortGpu from "onnxruntime-web/webgpu";
+import { pipeline, TextStreamer, InterruptableStoppingCriteria, env as tjsEnv } from "@huggingface/transformers";
+// kokoro-js is imported only by the version that uses it (see loadTTS).
+const ORT_DIST = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.30.0/dist/";
+const THREADS = self.crossOriginIsolated ? Math.min(4, navigator.hardwareConcurrency || 4) : 1;
+for (const o of [ort, ortGpu]) { o.env.wasm.wasmPaths = ORT_DIST; o.env.wasm.numThreads = THREADS; }
+tjsEnv.backends.onnx.wasm.wasmPaths = ORT_DIST;   // Transformers.js otherwise asks for its own (newer) runtime files
+ortGpu.env.logLevel = "error";
 
 // ---------- config ----------
 const params = new URLSearchParams(location.search);
@@ -177,7 +205,20 @@ const LLMS = {
   "lfm2-350m": { id: "onnx-community/LFM2-350M-ONNX", name: "LFM2 350M", mb: 293 },
   "lfm2-700m": { id: "onnx-community/LFM2-700M-ONNX", name: "LFM2 700M", mb: 559 },
   "qwen25-05b": { id: "onnx-community/Qwen2.5-0.5B-Instruct", name: "Qwen2.5 0.5B Instruct", mb: 786 },
+  "lfm25-350m": { id: "onnx-community/LFM2.5-350M-ONNX", name: "LFM2.5 350M", mb: 255 },
+  "smollm2-135m": { id: "HuggingFaceTB/SmolLM2-135M-Instruct", name: "SmolLM2 135M Instruct", mb: 137 },
 };
+// Three versions of the same agent, from the full GPU stack down to one that fits an older phone's CPU and memory.
+// lite: the language model on the GPU, the rest small. superlite: no GPU at all (e.g. Safari before iOS 26).
+// Both use the device's own voice: Kokoro alone needs ~1 GB of page memory plus ~0.9 GB on the GPU, and its 8-bit
+// version is slower than real time on a GPU. Both load one model at a time and cut replies at two sentences.
+const PROFILES = {
+  normal: { asr: "parakeet", llm: null, tts: "kokoro", mb: 830 },
+  lite: { asr: "moonshine", llm: "lfm25-350m", tts: "system", mb: 290, maxSentences: 2 },
+  superlite: { asr: "moonshine", llm: "smollm2-135m", tts: "system", mb: 170, maxSentences: 2 },
+};
+const MOONSHINE = "onnx-community/moonshine-tiny-ONNX";   // English only; 8-bit: 28 MB
+let profile = PROFILES.normal;
 const SYSTEM_PROMPT = "You are a friendly voice assistant. Your replies are spoken aloud, so answer in one or two short, natural sentences. Never use lists, markdown, emojis or code.";
 const ENDPOINT_MS = Number(params.get("endpoint") || 500);   // silence needed to end a turn
 const FRAME = 512, CTX = 64, SR = 16000, FRAME_MS = FRAME / SR * 1000;
@@ -203,15 +244,20 @@ async function fetchCached(url, expected, onProgress) {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`${res.status} fetching ${url}`);
   const total = Number(res.headers.get("content-length")) || expected;
-  const reader = res.body.getReader(), chunks = [];
-  let got = 0;
+  // The bytes go straight into one buffer: a phone can't afford the downloaded pieces plus a joined copy.
+  // (It grows if the server compressed the file, where content-length is smaller than the data.)
+  const reader = res.body.getReader();
+  let bytes = new Uint8Array(total || 1 << 20), got = 0;
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
-    chunks.push(value); got += value.length; onProgress(got / total);
+    if (got + value.length > bytes.length) {
+      const b = new Uint8Array(Math.max(bytes.length * 2, got + value.length));
+      b.set(bytes.subarray(0, got)); bytes = b;
+    }
+    bytes.set(value, got); got += value.length; onProgress(got / total);
   }
-  const bytes = new Uint8Array(got);
-  let off = 0; for (const c of chunks) { bytes.set(c, off); off += c.length; }
+  bytes = bytes.subarray(0, got);
   if (cache) await cache.put(url, new Response(bytes)).catch(() => {});
   return bytes;
 }
@@ -219,8 +265,8 @@ async function fetchCached(url, expected, onProgress) {
 // ---------- speech to text: Parakeet TDT with a hand-written greedy decoder ----------
 const asr = {};
 async function loadASR() {
-  ort.env.wasm.numThreads = self.crossOriginIsolated ? Math.min(4, navigator.hardwareConcurrency || 4) : 1;
-  ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.30.0/dist/";
+  if (profile.asr === "moonshine") return loadMoonshine();
+  asr.vort = ort;
   const total = Object.values(ASR_FILES).reduce((a, f) => a + f.size, 0);
   const done = {};
   const prog = (k) => (p) => {
@@ -234,20 +280,18 @@ async function loadASR() {
   const opts = { executionProviders: ["wasm"], graphOptimizationLevel: "all" };
   asr.pre = await ort.InferenceSession.create(pre, opts);
   // The encoder is ~95% of the compute: on WebGPU it runs ~15x faster than WebAssembly.
-  // It needs ORT's WebGPU build, which lacks the float64 Cast the preprocessor uses, so it gets its own runtime.
+  // It needs ORT's WebGPU build, which lacks the float64 Cast the preprocessor uses, so it gets its own runtime
+  // (shared with Transformers.js).
   const gpu = params.get("asr") !== "wasm" && navigator.gpu && await navigator.gpu.requestAdapter().catch(() => null);
   if (gpu) {
-    asr.ortEnc = await import("https://cdn.jsdelivr.net/npm/onnxruntime-web@1.30.0/dist/ort.webgpu.min.mjs");
-    asr.ortEnc.env.wasm.wasmPaths = ort.env.wasm.wasmPaths;
-    asr.ortEnc.env.wasm.numThreads = ort.env.wasm.numThreads;
-    asr.ortEnc.env.logLevel = "error";
+    asr.ortEnc = ortGpu;
     asr.enc = await asr.ortEnc.InferenceSession.create(enc, { executionProviders: ["webgpu", "wasm"], graphOptimizationLevel: "all" });
   } else {
     asr.ortEnc = ort;
     asr.enc = await ort.InferenceSession.create(enc, opts);
   }
   asr.device = gpu ? "webgpu" : "wasm";
-  $("st-asr").querySelector(".k").textContent = gpu ? "Speech to text · GPU + CPU" : "Speech to text · CPU";
+  $("st-asr").querySelector(".dev").textContent = gpu ? "GPU + CPU" : "CPU";
   asr.dec = await ort.InferenceSession.create(dec, opts);
   asr.vad = await ort.InferenceSession.create(vad, opts);
   asr.vocab = [];
@@ -257,7 +301,38 @@ async function loadASR() {
   }
 }
 
+// Lite versions: Moonshine tiny (English only, 28 MB in 8-bit) on the CPU through Transformers.js, which the
+// language model loads anyway. On one CPU thread it transcribes a 6 s clip in ~0.8 s; Parakeet takes ~6 s there.
+async function loadMoonshine() {
+  const v = ASR_FILES.vad;
+  const vad = await fetchCached(v.url, v.size, () => {});
+  // On the shared runtime too, so the plain WebAssembly one is never started.
+  asr.vort = ortGpu;
+  asr.vad = await ortGpu.InferenceSession.create(vad, { executionProviders: ["wasm"], graphOptimizationLevel: "all" });
+  const files = {};
+  asr.moonshine = await pipeline("automatic-speech-recognition", MOONSHINE, {
+    device: "wasm", dtype: "q8",
+    progress_callback: (p) => {
+      if (p.status === "progress" && p.total) {
+        files[p.file] = [p.loaded, p.total];
+        const [a, b] = Object.values(files).reduce(([x, y], [l, t]) => [x + l, y + t], [0, 0]);
+        setStage("st-asr", { pct: a / b * 100, text: `downloading ${Math.round(a / 1e6)} / ${Math.round(b / 1e6)} MB` });
+      }
+    },
+  });
+  asr.device = "wasm";
+  asr.lock = Promise.resolve();
+}
+
 async function transcribe(wav) {
+  if (asr.moonshine) {
+    // One model run at a time: a speculative transcription can still be running when the next one starts.
+    const t0 = now();
+    const p = asr.lock.then(() => asr.moonshine(wav));
+    asr.lock = p.catch(() => {});
+    const r = await p;
+    return { text: r.text.trim(), encMs: null, decMs: null, ms: now() - t0 };
+  }
   const t0 = now();
   const { features, features_lens } = await asr.pre.run({
     waveforms: new ort.Tensor("float32", wav, [1, wav.length]),
@@ -301,13 +376,15 @@ async function loadLLM() {
   const adapter = navigator.gpu && await navigator.gpu.requestAdapter().catch(() => null);
   // Without WebGPU: the LFM2 exports (4- and 8-bit) use GatherBlockQuantized, which the CPU runtime lacks,
   // while Qwen2.5's 8-bit export uses standard integer ops, so the CPU path always uses that.
-  llmKey = adapter ? $("llm-select").value : "qwen25-05b";
+  // Super-lite: SmolLM2 135M in 8-bit on the CPU (~15-20 tok/s on one laptop thread; weak on facts).
+  const cpu = !adapter || profile === PROFILES.superlite;
+  llmKey = profile === PROFILES.normal ? (adapter ? $("llm-select").value : "qwen25-05b") : adapter ? profile.llm : "smollm2-135m";
   const m = LLMS[llmKey];
-  const device = adapter ? "webgpu" : "wasm";
-  const dtype = !adapter ? "q8" : adapter.features.has("shader-f16") ? "q4f16" : "q4";
-  $("st-llm").querySelector(".dev").textContent = adapter ? "GPU" : "CPU (no WebGPU)";
+  const device = cpu ? "wasm" : "webgpu";
+  const dtype = cpu ? "q8" : adapter.features.has("shader-f16") ? "q4f16" : "q4";
+  $("st-llm").querySelector(".dev").textContent = !cpu ? "GPU" : adapter ? "CPU" : "CPU (no WebGPU)";
   $("llm-name").textContent = m.name;
-  $("llm-det").textContent = dtype === "q8" ? "8-bit · 512 MB (CPU fallback)" : `${dtype} · ~${m.mb} MB`;
+  $("llm-det").textContent = llmKey === "qwen25-05b" && cpu ? "8-bit · 512 MB (CPU fallback)" : `${dtype} · ~${m.mb} MB`;
   const files = {};
   llm = await pipeline("text-generation", m.id, {
     device, dtype,
@@ -323,16 +400,20 @@ async function loadLLM() {
 }
 
 // ---------- text to speech ----------
-let tts;
+let tts, kokoro;
 async function loadTTS() {
+  if (profile.tts === "system" || params.get("tts") === "system") return useSystemVoice();
   // Kokoro on the CPU is slower than real time on many laptops, so prefer the GPU.
-  // fp32 because 8-bit runs slower than fp32 in WebAssembly and many GPUs lack fp16 shaders.
+  // fp32 because 8-bit runs slower than fp32 in WebAssembly (and far slower on a GPU: 17 s for a 5 s sentence on a
+  // GTX 1050), and many GPUs lack fp16 shaders.
   const hasGPU = navigator.gpu && await navigator.gpu.requestAdapter().catch(() => null);
   const device = params.get("tts") || (hasGPU ? "webgpu" : "wasm");
   const dtype = "fp32";
   $("st-tts").querySelector(".dev").textContent = device === "webgpu" ? "GPU" : "CPU";
+  // The unbundled build, so it runs on this page's Transformers.js and ONNX Runtime (see the import map).
+  kokoro = await import("https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/dist/kokoro.js");
   const files = {};
-  tts = await KokoroTTS.from_pretrained("onnx-community/Kokoro-82M-v1.0-ONNX", {
+  tts = await kokoro.KokoroTTS.from_pretrained("onnx-community/Kokoro-82M-v1.0-ONNX", {
     dtype, device,
     progress_callback: (p) => {
       if (p.status === "progress" && p.total) {
@@ -343,6 +424,65 @@ async function loadTTS() {
     },
   });
   return { device, dtype };
+}
+
+// The device's own speech synthesis: nothing to download, and fast on any phone. Local voices are preferred,
+// so the reply text stays on the device (some browsers also offer cloud voices).
+async function useSystemVoice() {
+  const voices = await new Promise((r) => {
+    const v = speechSynthesis.getVoices();
+    if (v.length) return r(v);
+    speechSynthesis.addEventListener("voiceschanged", () => r(speechSynthesis.getVoices()), { once: true });
+    setTimeout(() => r(speechSynthesis.getVoices()), 1500);
+  });
+  const score = (v) => (v.localService ? 4 : 0) + (/^en[-_]US/i.test(v.lang) ? 2 : /^en/i.test(v.lang) ? 1 : -9) +
+    (/enhanced|premium|natural|samantha/i.test(v.name) ? 1 : 0);
+  const voice = voices.slice().sort((a, b) => score(b) - score(a))[0] || null;
+  tts = { system: true, voice };
+  $("st-tts").querySelector(".dev").textContent = "device";
+  $("tts-name").textContent = "Built-in voice";
+  $("tts-det").textContent = voice ? `${voice.name} · nothing to download` : "browser default · nothing to download";
+  return { device: "system", dtype: voice?.name || "default" };
+}
+
+// iOS only lets a page speak after a tap, so an empty utterance is spoken from each click handler.
+function unlockSpeech() { if ("speechSynthesis" in self) speechSynthesis.speak(new SpeechSynthesisUtterance("")); }
+
+// A speaker takes the reply text as the LLM streams it, and calls onAudible(time) when each piece starts playing.
+function startSpeaker(id, onAudible) {
+  if (!tts.system) {
+    const splitter = new kokoro.TextSplitterStream();
+    const done = (async () => {
+      for await (const { audio } of tts.stream(splitter, { voice: $("voice-select").value })) {
+        if (id !== turn) break;
+        onAudible(playChunk(audio.audio, audio.sampling_rate));
+      }
+    })();
+    return { push: (t) => splitter.push(t), flush: () => splitter.flush(), close: () => splitter.close(), done };
+  }
+  // Built-in voice: speak each finished sentence (or flushed clause) as its own utterance.
+  let buf = "", last = Promise.resolve(), closed;
+  const finished = new Promise((r) => (closed = r));
+  const say = (text) => {
+    text = text.trim();
+    if (!text || id !== turn) return;
+    const u = new SpeechSynthesisUtterance(text);
+    if (tts.voice) { u.voice = tts.voice; u.lang = tts.voice.lang; }
+    u.onstart = () => { if (id === turn) onAudible(now()); };
+    // onend can go missing (cancel, some browsers), so a timeout based on the text length backs it up.
+    const ended = new Promise((r) => { u.onend = u.onerror = r; setTimeout(r, 3000 + text.length * 120); });
+    last = last.then(() => ended);
+    speechSynthesis.speak(u);
+  };
+  const push = (t) => {
+    buf += t;
+    const m = buf.match(/^([\s\S]*?[.!?])\s+(?=\S)/);
+    if (m) { say(m[1]); buf = buf.slice(m[0].length); }
+  };
+  return {
+    push, flush: () => { say(buf); buf = ""; }, close: () => { say(buf); buf = ""; closed(); },
+    done: finished.then(() => last),
+  };
 }
 
 // ---------- audio output ----------
@@ -359,9 +499,13 @@ function playChunk(samples, sampleRate) {
   sources.add(src); src.onended = () => sources.delete(src);
   return now() + (startAt - playCtx.currentTime) * 1000;   // when it becomes audible, in performance.now() time
 }
-function stopPlayback() { for (const s of sources) { try { s.stop(); } catch {} } sources.clear(); playHead = 0; }
+function stopPlayback() {
+  for (const s of sources) { try { s.stop(); } catch {} }
+  sources.clear(); playHead = 0;
+  if (tts?.system) speechSynthesis.cancel();
+}
 const playbackDone = () => new Promise((r) => {
-  const check = () => (playCtx.currentTime >= playHead - 0.01 ? r() : setTimeout(check, 50));
+  const check = () => ((tts?.system ? !speechSynthesis.speaking : playCtx.currentTime >= playHead - 0.01) ? r() : setTimeout(check, 50));
   check();
 });
 
@@ -417,37 +561,40 @@ async function handleUtterance(wav, speechEndAt, endpointMs, asrPromise = null) 
     setStatus("thinking", "Thinking…");
     const agentEl = addMsg("agent", "…");
     c.els.push(agentEl);
-    const voice = $("voice-select").value;
-    const splitter = new TextSplitterStream();
     let firstAudioAt = null;
-    const speaker = (async () => {
-      for await (const { audio } of tts.stream(splitter, { voice })) {
-        if (id !== turn) break;
-        const at = playChunk(audio.audio, audio.sampling_rate);
-        if (firstAudioAt == null) { firstAudioAt = at; m.ttsReadyAt = now(); c.audible = true; setStatus("speaking", "Speaking"); }
-      }
-    })();
+    const speaker = startSpeaker(id, (at) => {
+      if (firstAudioAt == null) { firstAudioAt = at; m.ttsReadyAt = now(); c.audible = true; setStatus("speaking", "Speaking"); }
+    });
 
     const llmStart = now();
-    let reply = "", firstTokAt = null, firstSentenceAt = null, nTok = 0;
+    let reply = "", firstTokAt = null, firstSentenceAt = null, nTok = 0, capped = false;
     stopper = new InterruptableStoppingCriteria();
     const streamer = new TextStreamer(llm.tokenizer, {
       skip_prompt: true, skip_special_tokens: true,
       callback_function: (txt) => {
-        if (id !== turn) return;
+        if (id !== turn || capped) return;
         if (firstTokAt == null) firstTokAt = now();
         reply += txt;
+        // The small versions stop after a few sentences: small models ramble, and a phone pays for every token.
+        // Text arrives a word at a time, so drop whatever came after the last sentence.
+        const ends = profile.maxSentences ? [...reply.matchAll(/[.!?](?=\s|$)/g)] : [];
+        if (ends.length >= profile.maxSentences) {
+          const cut = ends[profile.maxSentences - 1].index + 1;
+          txt = txt.slice(0, Math.max(0, txt.length - (reply.length - cut)));
+          reply = reply.slice(0, cut);
+          capped = true; stopper.interrupt();
+        }
         if (firstSentenceAt == null && /[.!?](\s|$)/.test(reply)) firstSentenceAt = now();
         // Long first sentence: send its first clause to the voice right away.
         if (firstSentenceAt == null && /[,;:]\s*$/.test(reply) && reply.trim().split(/\s+/).length >= 5) {
           firstSentenceAt = now();
-          splitter.push(txt);
-          splitter.flush();
+          speaker.push(txt);
+          speaker.flush();
           agentEl.textContent = reply;
           return;
         }
         agentEl.textContent = reply;
-        splitter.push(txt);
+        speaker.push(txt);
       },
       token_callback_function: () => { nTok++; },
     });
@@ -455,8 +602,8 @@ async function handleUtterance(wav, speechEndAt, endpointMs, asrPromise = null) 
     await llm(msgs, { max_new_tokens: 120, do_sample: false, repetition_penalty: 1.05, streamer, stopping_criteria: stopper });
     const llmEnd = now();
     if (firstSentenceAt == null) firstSentenceAt = llmEnd;   // reply without terminal punctuation
-    splitter.close();
-    await speaker;
+    speaker.close();
+    await speaker.done;
     if (id !== turn) return m;
     history.push({ role: "assistant", content: reply.trim() });
     Object.assign(m, {
@@ -495,16 +642,16 @@ function renderLatency(m) {
 let micCtx, micStream, listening = false;
 let vadState, vadContext, speaking = false, silent = 0, voiced = 0, utter = [], preRoll = [], lastVoiceAt = 0, spec = null;
 const SPEC_MS = Number(params.get("spec") ?? 160);   // pause length that triggers a speculative transcription
-const srTensor = () => new ort.Tensor("int64", BigInt64Array.of(16000n), []);
+const srTensor = () => new asr.vort.Tensor("int64", BigInt64Array.of(16000n), []);
 function resetVad() {
-  vadState = new ort.Tensor("float32", new Float32Array(2 * 128), [2, 1, 128]);
+  vadState = new asr.vort.Tensor("float32", new Float32Array(2 * 128), [2, 1, 128]);
   vadContext = new Float32Array(CTX); speaking = false; silent = 0; voiced = 0; utter = []; preRoll = []; spec = null;
 }
 async function vadProb(frame) {
   const input = new Float32Array(CTX + FRAME);
   input.set(vadContext); input.set(frame, CTX);
   vadContext = frame.slice(FRAME - CTX);
-  const r = await asr.vad.run({ input: new ort.Tensor("float32", input, [1, CTX + FRAME]), state: vadState, sr: srTensor() });
+  const r = await asr.vad.run({ input: new asr.vort.Tensor("float32", input, [1, CTX + FRAME]), state: vadState, sr: srTensor() });
   vadState = r.stateN;
   return r.output.data[0];
 }
@@ -566,6 +713,8 @@ async function startMic() {
     audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
   });
   micCtx = new AudioContext({ sampleRate: SR });
+  // Created after the permission prompt, so Safari no longer counts the tap and starts it suspended.
+  await micCtx.resume();
   await micCtx.audioWorklet.addModule(URL.createObjectURL(new Blob([WORKLET], { type: "application/javascript" })));
   const node = new AudioWorkletNode(micCtx, "rec");
   node.port.onmessage = (e) => { if (listening) onFrame(e.data); };
@@ -596,14 +745,16 @@ async function runClip(url = "samples/test.wav") {
 
 // ---------- load + warm up ----------
 async function load() {
-  $("btn-load").disabled = true; $("llm-select").disabled = true;
+  $("btn-load").disabled = true; $("llm-select").disabled = true; $("profile-select").disabled = true;
+  unlockSpeech();
   playCtx = new AudioContext();
   const t0 = now();
   setStatus("loading", "Downloading models…");
-  const asrP = loadASR().then(() => setStage("st-asr", { pct: 100, text: "ready" }));
-  const llmP = loadLLM().then((x) => { setStage("st-llm", { pct: 100, text: `ready (${x.device})` }); return x; });
-  const ttsP = loadTTS().then((x) => { setStage("st-tts", { pct: 100, text: `ready (${x.device})` }); return x; });
-  const [, llmInfo, ttsInfo] = await Promise.all([asrP, llmP, ttsP]);
+  // One model at a time: a phone browser closes (and reloads) a tab whose memory peaks too high, and the shared
+  // ONNX Runtime can't create two WebGPU sessions at once anyway.
+  await loadASR(); setStage("st-asr", { pct: 100, text: "ready" });
+  const llmInfo = await loadLLM(); setStage("st-llm", { pct: 100, text: `ready (${llmInfo.device})` });
+  const ttsInfo = await loadTTS(); setStage("st-tts", { pct: 100, text: `ready (${ttsInfo.device})` });
   const loadMs = now() - t0;
 
   // Warm-up: first calls compile shaders and allocate buffers, so keep them out of the measurements.
@@ -613,28 +764,64 @@ async function load() {
   await transcribe(new Float32Array(3 * SR));
   resetVad(); await vadProb(new Float32Array(FRAME));
   await llm([{ role: "user", content: "Hi" }], { max_new_tokens: 4, do_sample: false });
-  await tts.generate("Hello there.", { voice: $("voice-select").value });
+  if (!tts.system) await tts.generate("Hello there.", { voice: $("voice-select").value });
   const warmMs = now() - w0;
 
   $("env-note").textContent = `Loaded in ${fmt(loadMs)}, warmed up in ${fmt(warmMs)} · ` +
     `${self.crossOriginIsolated ? `multithreaded CPU (${ort.env.wasm.numThreads} threads)` : "single-threaded CPU"} · ` +
-    `STT encoder on ${asr.device} · LLM on ${llmInfo.device} (${llmInfo.dtype}) · TTS on ${ttsInfo.device} (${ttsInfo.dtype})`;
+    `STT ${asr.moonshine ? "(Moonshine)" : "encoder"} on ${asr.device} · LLM on ${llmInfo.device} (${llmInfo.dtype}) · TTS on ${ttsInfo.device} (${ttsInfo.dtype})`;
   $("btn-talk").disabled = false; $("btn-test").disabled = false;
   $("btn-load").textContent = "Models loaded";
-  if (asr.device === "wasm") $("env-note").textContent += " · No WebGPU in this browser, so everything runs on the CPU: expect 10–20 s per reply.";
+  if (profile === PROFILES.normal && asr.device === "wasm") $("env-note").textContent += " · No WebGPU in this browser, so everything runs on the CPU: expect 10–20 s per reply. Super-lite is much faster here.";
   setStatus("idle", "Ready");
-  return { loadMs, warmMs, isolated: self.crossOriginIsolated, threads: ort.env.wasm.numThreads, asr: asr.device, llm: llmInfo, tts: ttsInfo };
+  return { profile: $("profile-select").value, loadMs, warmMs, isolated: self.crossOriginIsolated, threads: ort.env.wasm.numThreads, asr: asr.device, llm: llmInfo, tts: ttsInfo };
 }
+
+// ---------- version picker ----------
+// Default: Normal on a computer with WebGPU, Lite on a phone with WebGPU, Super-lite without WebGPU.
+// ?profile=normal|lite|superlite overrides it.
+function setProfile(key) {
+  profile = PROFILES[key];
+  $("profile-select").value = key;
+  $("llm-opt").hidden = key !== "normal";
+  const system = profile.tts === "system";
+  $("voice-opt").hidden = system;
+  $("btn-load").textContent = `Load models (~${profile.mb} MB, cached after the first visit)`;
+  const small = profile.asr === "moonshine";
+  $("asr-name").textContent = small ? "Moonshine tiny" : "Parakeet TDT 0.6B v3 (Redux)";
+  $("asr-det").textContent = small ? "8-bit · 28 MB · English only" : "ternary encoder, 2-bit ONNX · 208 MB";
+  $("st-asr").querySelector(".dev").textContent = small ? "CPU" : "GPU + CPU";
+  const m = LLMS[profile.llm || $("llm-select").value];
+  $("llm-name").textContent = m.name;
+  $("llm-det").textContent = key === "superlite" ? `8-bit · ${m.mb} MB` : `4-bit · ~${m.mb} MB`;
+  $("st-llm").querySelector(".dev").textContent = key === "superlite" ? "CPU" : "GPU";
+  $("tts-name").textContent = system ? "Built-in voice" : "Kokoro 82M";
+  $("tts-det").textContent = system ? "the device's own voice · nothing to download" : "fp32 · 325 MB";
+  $("st-tts").querySelector(".dev").textContent = system ? "device" : "GPU";
+}
+const adapterP = navigator.gpu ? navigator.gpu.requestAdapter().catch(() => null) : Promise.resolve(null);
+setProfile(PROFILES[params.get("profile")] ? params.get("profile") : "normal");
+adapterP.then((gpu) => {
+  const lite = $("profile-select").querySelector('[value="lite"]');
+  if (!gpu) { lite.disabled = true; lite.textContent += " — no WebGPU here"; }
+  if (params.get("profile") || $("btn-load").disabled) return;
+  const phone = navigator.userAgentData?.mobile || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ||
+    (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);   // iPadOS reports itself as a Mac
+  setProfile(!gpu ? "superlite" : phone ? "lite" : "normal");
+});
+$("profile-select").onchange = (e) => setProfile(e.target.value);
+$("llm-select").onchange = () => setProfile($("profile-select").value);
 
 $("btn-load").onclick = () => load().catch(showError);
 $("btn-talk").onclick = async () => {
   if (listening) { stopMic(); $("btn-talk").textContent = "Start talking"; return; }
+  unlockSpeech();
   try { await playCtx.resume(); await startMic(); $("btn-talk").textContent = "Stop"; } catch (e) { showError(e); }
 };
-$("btn-test").onclick = async () => { await playCtx.resume(); runClip().catch(showError); };
+$("btn-test").onclick = async () => { unlockSpeech(); await playCtx.resume(); runClip().catch(showError); };
 
 // Hooks for automated latency tests.
-window.agent = { load, runClip, results, startMic, transcribe, decodeTo16k };
+window.agent = { load, runClip, results, startMic, transcribe, decodeTo16k, setProfile };
 </script>
 </body>
 </html>
