@@ -67,26 +67,6 @@ const HEADER = `enable subgroups;\nrequires packed_4x8_integer_dot_product;\n`;
 // Per-step parameters, written before each submit.
 const PARAMS = `struct P { pos0: u32, M: u32, inOff: u32, seed: u32, temperature: f32, layer: u32, pad0: u32, pad1: u32 };`;
 
-const EMBED = (D) => `${HEADER}${PARAMS}
-@group(0) @binding(0) var<storage, read> Wq: array<u32>;
-@group(0) @binding(1) var<storage, read> S: array<f32>;
-@group(0) @binding(2) var<storage, read> tokens: array<u32>;
-@group(0) @binding(3) var<storage, read_write> x: array<f32>;
-@group(0) @binding(4) var<uniform> p: P;
-@compute @workgroup_size(128)
-fn main(@builtin(workgroup_id) wg: vec3<u32>, @builtin(local_invocation_id) l: vec3<u32>) {
-  let m = wg.x; if (m >= p.M) { return; }
-  let tok = tokens[p.pos0 + m];
-  for (var j = l.x; j < ${D / 8}u; j += 128u) {           // j = word within the row (8 values)
-    let blk = tok * ${D / 32}u + j / 4u; let w = j % 4u;
-    let q = Wq[blk * 4u + w]; let s = S[blk];
-    let lo = (vec4<f32>(unpack4xU8(q & 0x0F0F0F0Fu)) - 8.0) * s;
-    let hi = (vec4<f32>(unpack4xU8((q >> 4u) & 0x0F0F0F0Fu)) - 8.0) * s;
-    let base = m * ${D}u + (j / 4u) * 32u + w * 4u;
-    for (var i = 0u; i < 4u; i++) { x[base + i] = lo[i]; x[base + 16u + i] = hi[i]; }
-  }
-}`;
-
 // RMSNorm: out = x / sqrt(mean(x²) + eps) * w, one workgroup per token.
 const RMSNORM = (D, eps) => `${HEADER}${PARAMS}
 @group(0) @binding(0) var<storage, read> x: array<f32>;
@@ -446,7 +426,19 @@ export async function createWebGPU(gguf, bytes, cfg, opts = {}) {
   let uploaded = 0;
   const q4 = (name) => { const r = repackQ4(bytes, T[name]); uploaded += r.words.byteLength + r.scales.byteLength; return r; };
   const up = (r) => ({ w: buf(r.words), s: buf(r.scales) });
-  const embd = up(q4("token_embd.weight"));
+  // The embedding table (85 MB in Q4_0) stays in JavaScript: each step only needs the rows of its tokens, and GPU
+  // memory is the scarce resource when speech recognition, the LLM and the voice share a 3 GB card.
+  const embd = repackQ4(bytes, T["token_embd.weight"]);
+  const embedRows = (ids) => {
+    const out = new Float32Array(ids.length * D), u8 = new Uint8Array(embd.words.buffer);
+    ids.forEach((t, m) => {
+      for (let b = 0; b < D / 32; b++) {
+        const blk = t * (D / 32) + b, s = embd.scales[blk], o = m * D + 32 * b;
+        for (let j = 0; j < 16; j++) { const q = u8[blk * 16 + j]; out[o + j] = ((q & 15) - 8) * s; out[o + 16 + j] = ((q >> 4) - 8) * s; }
+      }
+    });
+    return out;
+  };
   const outW = repackQ8(bytes, T["output.weight"]); uploaded += outW.words.byteLength + outW.scales.byteLength;
   const out = { w: buf(outW.words), s: buf(outW.scales) };
   const outNorm = buf(f32Tensor(bytes, T["output_norm.weight"]));
@@ -489,7 +481,6 @@ export async function createWebGPU(gguf, bytes, cfg, opts = {}) {
   };
   const RW = opts.rowsPerWG || 4, WG = opts.gemvWG || 128;
   const K = {
-    embed: pipe(EMBED(D)),
     norm: pipe(RMSNORM(D, eps)),
     rope: pipe(ROPE_KV({ H, KVH, HD, CTX, theta: ropeTheta.toFixed(1) })),
     attn: pipe(ATTN({ H, KVH, HD, CTX })),
@@ -514,7 +505,6 @@ export async function createWebGPU(gguf, bytes, cfg, opts = {}) {
     const key = mt + ":" + withOutput;
     if (plans.has(key)) return plans.get(key);
     const ops = [];
-    ops.push([K.embed, bg(K.embed, embd.w, embd.s, tokens, x, P), [mt], "embed"]);
     for (let l = 0; l < NL; l++) {
       const Ly = layers[l];
       if (mt === 1 && !opts.unfused) {            // decode: 4 fused matrix-vector kernels + RoPE + attention
@@ -564,6 +554,7 @@ export async function createWebGPU(gguf, bytes, cfg, opts = {}) {
     for (let c = 0; c < ids.length; c += MT) {
       const n = Math.min(MT, ids.length - c), last = c + n >= ids.length;
       const mt = n === 1 ? 1 : MT;
+      device.queue.writeBuffer(x, 0, embedRows(ids.slice(c, c + n)));
       const params = new Uint32Array(8);
       params.set([pos + c, n, last ? (n - 1) * D : 0, seed >>> 0]);
       new Float32Array(params.buffer)[4] = temperature;
@@ -592,6 +583,7 @@ export async function createWebGPU(gguf, bytes, cfg, opts = {}) {
     const res = device.createBuffer({ size: 16 * ops.length, usage: U.QUERY_RESOLVE | U.COPY_SRC });
     const rd = device.createBuffer({ size: 16 * ops.length, usage: U.MAP_READ | U.COPY_DST });
     const params = new Uint32Array(8); params.set([pos, n, (n - 1) * D, 1]);
+    device.queue.writeBuffer(x, 0, embedRows(new Array(n).fill(0)));
     device.queue.writeBuffer(P, 0, params);
     params[2] = 0; for (let l = 0; l < NL; l++) { params[5] = l; device.queue.writeBuffer(layers[l].lp, 0, params); }
     const enc = device.createCommandEncoder();

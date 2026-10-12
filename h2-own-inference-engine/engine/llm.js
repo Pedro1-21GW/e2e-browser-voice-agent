@@ -10,7 +10,7 @@ import { parseGGUF, qwen2Config, fetchModel } from "./gguf.js";
 import { Tokenizer, chatPrompt } from "./tokenizer.js";
 
 export class LLM {
-  static async load({ url, backend = "webgpu", threads, ctx = 4096, onProgress = () => {}, ...opts }) {
+  static async load({ url, backend = "webgpu", threads, ctx = 2048, onProgress = () => {}, ...opts }) {
     const t0 = performance.now();
     const bytes = await fetchModel(url, (got, total, cached) => onProgress({ stage: cached ? "cache" : "download", got, total }));
     const tDownload = performance.now() - t0;
@@ -55,7 +55,12 @@ export class LLM {
 
   // Stream the assistant's reply as text pieces.
   async *chat(messages, { maxTokens = 256, temperature = 0, seed = (Math.random() * 2 ** 32) >>> 0, signal } = {}) {
-    const ids = this.tok.encode(chatPrompt(messages));
+    // Keep the prompt plus the reply inside the context: drop the oldest exchanges (never the system prompt).
+    let msgs = messages, ids = this.tok.encode(chatPrompt(msgs));
+    while (ids.length + maxTokens > this.be.ctx - 8 && msgs.length > 2) {
+      msgs = msgs[0].role === "system" ? [msgs[0], ...msgs.slice(3)] : msgs.slice(2);
+      ids = this.tok.encode(chatPrompt(msgs));
+    }
     const dec = this.tok.streamDecoder();
     const t0 = performance.now();
     let { next, prefilled, reused } = await this.feed(ids, { temperature, seed });

@@ -22,7 +22,13 @@ export async function createCPU(gguf, bytes, cfg, opts = {}) {
   const threads = shared ? (opts.threads || cap.cores) : 1;
   const decodeThreads = shared ? (opts.decodeThreads || Math.max(1, Math.min(threads, Math.ceil(cap.cores / 2)))) : 1;
   const file = `kernels-${shared ? "mt" : "st"}${relaxed ? "-relaxed" : ""}.wasm`;
-  const worker = new Worker(new URL("./cpu-worker.js", import.meta.url), { type: "module" });
+  // The worker is started from a blob of its own source. A worker loaded from a URL gets its isolation (COEP) from
+  // that URL's response, and on GitHub Pages only a service worker can add that header, and only inside its scope
+  // (h1-browser-libs/): the engine's folder is outside it, so Chrome refused the worker. A blob worker inherits the
+  // page's isolation wherever the page is hosted.
+  const src = await (await fetch(new URL("./cpu-worker.js", import.meta.url))).text();
+  const blobUrl = URL.createObjectURL(new Blob([src], { type: "text/javascript" }));
+  const worker = new Worker(blobUrl, { type: "module" });
 
   let pending = null;
   const ready = new Promise((resolve, reject) => {
@@ -33,7 +39,7 @@ export async function createCPU(gguf, bytes, cfg, opts = {}) {
       else if (m.type === "error") { (pending ? pending.reject : reject)(new Error(m.message)); pending = null; }
       else if (m.type === "token") { const p = pending; pending = null; p.resolve(m); }
     };
-    worker.onerror = (e) => reject(new Error(e.message));
+    worker.onerror = (e) => reject(new Error(e.message || "the CPU engine's worker failed to start"));
   });
   worker.postMessage({
     type: "init", bytes, tensors: gguf.tensors, config: cfg, wasmUrl: new URL(file, import.meta.url).href,

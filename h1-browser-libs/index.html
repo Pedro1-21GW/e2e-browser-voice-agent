@@ -243,7 +243,17 @@ function setStage(id, { pct, text }) {
   if (text != null) el.querySelector(".st").textContent = text;
 }
 function setStatus(s, text) { $("status").dataset.s = s; $("status-text").textContent = text; }
-function showError(e) { console.error(e); $("err").textContent = String(e && e.stack || e); }
+function showError(e) {
+  console.error(e);
+  const msg = String(e && e.stack || e);
+  // When the GPU runs out of memory, Chrome drops the WebGPU device and every model on it fails, usually with a
+  // failed buffer download (mapAsync). Say so in plain words.
+  const gpuLost = /MapAsync|mapAsync|device (was )?lost|Device is lost|Failed to download data from buffer/i.test(msg);
+  $("err").textContent = gpuLost
+    ? "The GPU stopped responding, most likely out of memory (speech recognition, the language model and the voice share it). " +
+      "Close other GPU-heavy tabs or apps and reload the page, or pick a CPU-only version.\n\n" + msg
+    : msg;
+}
 
 // Download with progress, cached in the Cache API so later visits are instant.
 async function fetchCached(url, expected, onProgress) {
