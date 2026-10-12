@@ -62,6 +62,14 @@ const PAGES = [
   ["07-latency-tricks", "7 · Latency tricks"], ["08-gpu-kernels", "8 · GPU kernels"], ["glossary", "Glossary"],
 ];
 
+// The Hypo 2 engine has its own wiki, in h2-own-inference-engine/wiki/ (opened with ?doc=...).
+const H2 = "h2-own-inference-engine/wiki/";
+const H2_PAGES = [
+  ["Home", "Hypo 2 wiki"], ["01-forward-pass", "1 · Forward pass"], ["02-reading-the-files", "2 · Model file"],
+  ["03-gpu-one-token", "3 · GPU"], ["04-cpu-webassembly", "4 · CPU"], ["05-in-the-voice-agent", "5 · Voice agent"],
+  ["06-prior-work", "6 · Prior work"],
+];
+
 const q = new URLSearchParams(location.search);
 const safe = (path) => /^[\w./-]+\.md$/.test(path) && !path.includes("..");
 let docPath = q.get("doc");
@@ -70,9 +78,12 @@ if (!docPath || !safe(docPath)) {
   docPath = `wiki/${p}.md`;
 }
 const pageId = docPath.startsWith("wiki/") ? docPath.slice(5, -3) : null;
+const h2Id = docPath.startsWith(H2) && !docPath.slice(H2.length).includes("/") ? docPath.slice(H2.length, -3) : null;
+const LIST = h2Id ? H2_PAGES : PAGES, current = h2Id ?? pageId;
+const href = (id) => h2Id ? `?doc=${H2}${id}.md` : `?p=${id}`;
 
-document.getElementById("pages").innerHTML = PAGES.map(([id, label]) =>
-  `<li><a href="?p=${id}"${id === pageId ? ' aria-current="page"' : ""}>${label}</a></li>`).join("");
+document.getElementById("pages").innerHTML = LIST.map(([id, label]) =>
+  `<li><a href="${href(id)}"${id === current ? ' aria-current="page"' : ""}>${label}</a></li>`).join("");
 
 // Map a link inside a document to where it should go on the site.
 function route(href) {
@@ -81,7 +92,7 @@ function route(href) {
   const path = url.pathname.slice(1);
   if (path.startsWith(".")) return `${REPO}/blob/main/${path}`;            // GitHub Pages doesn't publish dot-folders
   if (path.endsWith(".md")) return path.startsWith("wiki/") && !path.slice(5).includes("/") ? `?p=${path.slice(5, -3)}` : `?doc=${path}`;
-  if (path.endsWith(".html") || path.endsWith("/")) return "../" + path;   // live pages (demo, kernel lab)
+  if (path.endsWith(".html") || path.endsWith("/")) return "../" + path + url.search;   // live pages (demo, labs), keeping ?options
   return `${REPO}/blob/main/${path}`;                                    // code and data files: view on GitHub
 }
 
@@ -93,12 +104,12 @@ try {
   article.querySelectorAll("a[href]").forEach((a) => { a.href = route(a.getAttribute("href")); });
   const h1 = article.querySelector("h1");
   document.title = (h1 ? h1.textContent + " · " : "") + "Voice Agent Wiki";
-  document.getElementById("crumb").textContent = pageId ? "Wiki" : docPath.split("/")[0];
-  if (pageId) {
-    const i = PAGES.findIndex(([id]) => id === pageId);
-    const prev = PAGES[i - 1], next = PAGES[i + 1];
+  document.getElementById("crumb").textContent = pageId ? "Wiki" : h2Id ? "Hypo 2 wiki" : docPath.split("/")[0];
+  if (current) {
+    const i = LIST.findIndex(([id]) => id === current);
+    const prev = LIST[i - 1], next = LIST[i + 1];
     document.getElementById("pager").innerHTML =
-      (prev ? `<a href="?p=${prev[0]}">← ${prev[1]}</a>` : "<span></span>") + (next ? `<a href="?p=${next[0]}">${next[1]} →</a>` : "");
+      (prev ? `<a href="${href(prev[0])}">← ${prev[1]}</a>` : "<span></span>") + (next ? `<a href="${href(next[0])}">${next[1]} →</a>` : "");
   }
 } catch (e) {
   document.getElementById("doc").innerHTML = `<p>Couldn't load <code>${docPath}</code>. <a href="${REPO}/blob/main/${docPath}">Read it on GitHub</a>.</p>`;

@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>H2 LLM Lab</title>
+<script>
+  // Threads in WebAssembly need cross-origin isolation; GitHub Pages can't send the headers, so a service worker adds
+  // them and the page reloads once (serve.py sends them directly when running locally).
+  if (!window.crossOriginIsolated && "serviceWorker" in navigator) {
+    navigator.serviceWorker.register("sw.js").then(() => {
+      if (!sessionStorage.getItem("coi-reloaded")) { sessionStorage.setItem("coi-reloaded", "1"); location.reload(); }
+    });
+  }
+</script>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="../../assets/amber.css">
+<style>
+  main { max-width: 920px; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 14px 0; }
+  select, input[type=number] { font: inherit; padding: 6px 8px; background: var(--panel, #1a1a1a); color: inherit; border: 1px solid var(--line, #444); border-radius: 6px; }
+  table { margin-top: 14px; }
+  th, td { text-align: right; white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  #log { color: var(--muted); font-size: .85rem; white-space: pre-wrap; margin-top: 10px; }
+  #chat { margin-top: 18px; display: flex; flex-direction: column; gap: 8px; }
+  .msg { padding: 8px 12px; border-radius: 8px; border: 1px solid var(--line, #444); max-width: 85%; }
+  .msg.user { align-self: flex-end; }
+  #say { flex: 1; min-width: 200px; font: inherit; padding: 8px; background: transparent; color: inherit; border: 1px solid var(--line, #444); border-radius: 6px; }
+  .stat { color: var(--muted); font-size: .8rem; }
+</style>
+</head>
+<body>
+<div class="grain" aria-hidden="true"></div>
+<main>
+  <nav class="crumbs"><a href="https://pedro1-21gw.github.io/">Pedro Benevenuto Valadares</a><span aria-hidden="true">/</span><a href="../../">e2e-browser-voice-agent</a><span aria-hidden="true">/</span><span>Hypo 2 LLM lab</span></nav>
+  <h1 class="page-title">Our own LLM engine</h1>
+  <p class="kicker">Hypothesis 2 · milestone 1 · experimental</p>
+  <p class="lede">Qwen2.5 0.5B Instruct (4-bit GGUF, 429 MB) running on an inference engine written for this project: hand-written WebGPU kernels for the GPU, and C compiled to WebAssembly with SIMD and threads for the CPU. No ML libraries. The model file is cached after the first download. This is an experiment, tested on one laptop (GTX 1050, Chrome on Windows): expect rough edges elsewhere.</p>
+  <div class="row">
+    <label>Backend <select id="backend">
+      <option value="webgpu">GPU (WebGPU)</option>
+      <option value="cpu">CPU (WebAssembly)</option>
+    </select></label>
+    <label id="thr-l">Threads <input id="threads" type="number" min="1" max="16" value="4" style="width:4em"></label>
+    <button class="primary" id="load">Load model</button>
+    <button id="check" disabled>Check against reference</button>
+    <button id="bench" disabled>Benchmark</button>
+  </div>
+  <div class="scroll"><table><thead><tr><th>Measurement</th><th>Value</th><th>Notes</th></tr></thead><tbody id="rows"></tbody></table></div>
+  <div id="log"></div>
+  <div id="chat"></div>
+  <div class="row"><input id="say" placeholder="Say something to the model…" disabled><button id="send" disabled>Send</button><button id="reset" disabled>New chat</button></div>
+</main>
+<script type="module">
+import { LLM } from "../engine/llm.js";
+import { cpuCapabilities } from "../engine/cpu.js";
+import { chatPrompt } from "../engine/tokenizer.js";
+
+const $ = (id) => document.getElementById(id);
+const params = new URLSearchParams(location.search);
+const MODEL = params.get("model") || "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_0.gguf";
+const SYSTEM = "You are a friendly voice assistant. Your replies are spoken aloud, so answer in one or two short, natural sentences. Never use lists, markdown, emojis or code.";
+let llm = null;
+const history = [];
+const log = (s) => { $("log").textContent = s; };
+const row = (k, v, note = "") => { const tr = document.createElement("tr"); tr.innerHTML = `<td>${k}</td><td>${v}</td><td>${note}</td>`; $("rows").appendChild(tr); };
+const ms = (v) => v >= 1000 ? (v / 1000).toFixed(2) + " s" : v.toFixed(v < 10 ? 1 : 0) + " ms";
+const median = (a) => { const s = [...a].sort((x, y) => x - y); return s[s.length >> 1]; };
+
+const cap = cpuCapabilities();
+if (!navigator.gpu) { $("backend").value = "cpu"; $("backend").querySelector("[value=webgpu]").disabled = true; }
+$("threads").value = params.get("threads") || cap.cores;
+if (!cap.threads) { $("threads").value = 1; $("threads").disabled = true; }
+if (params.get("backend")) $("backend").value = params.get("backend");
+
+async function load(opts = {}) {
+  const backend = opts.backend || $("backend").value;
+  llm?.be.destroy?.();
+  llm = null;
+  $("rows").innerHTML = "";
+  const t0 = performance.now();
+  llm = await LLM.load({
+    url: opts.url || MODEL, backend, threads: Number(opts.threads || $("threads").value), decodeThreads: opts.decodeThreads, relaxed: opts.relaxed,
+    keepLogits: !!opts.keepLogits,
+    onProgress: ({ stage, got, total }) => log(stage === "upload" ? `preparing weights: layer ${got} / ${total}` : `${stage === "cache" ? "reading cache" : "downloading"}: ${(got / 1e6).toFixed(0)} / ${(total / 1e6).toFixed(0)} MB`),
+  });
+  const loadMs = performance.now() - t0;
+  row("Backend", backend === "webgpu" ? "GPU (WebGPU)" : "CPU (WebAssembly)", llm.be.info);
+  row("Load", ms(loadMs), `download/cache ${ms(llm.loadTimes.download)}, weights → ${backend === "webgpu" ? "GPU" : "WASM memory"} + warm-up ${ms(llm.loadTimes.prepare)}`);
+  log("");
+  for (const id of ["check", "bench", "say", "send", "reset"]) $(id).disabled = false;
+  return { backend, info: llm.be.info, loadMs, download: llm.loadTimes.download, prepare: llm.loadTimes.prepare };
+}
+
+// Compare with reference.json (Hugging Face Transformers on the same GGUF weights).
+async function check() {
+  const ref = await (await fetch("reference.json")).json();
+  const out = [];
+  for (const c of ref.chats) {
+    llm.reset();
+    const ids = await llm.generateIds(c.prompt_ids, ref.steps);
+    const eos = c.greedy_ids.indexOf(llm.cfg.eos);
+    const upTo = eos < 0 ? ref.steps : eos + 1;
+    let agree = 0; while (agree < upTo && ids[agree] === c.greedy_ids[agree]) agree++;
+    out.push({ prompt: c.messages.at(-1).content, agree, of: upTo, text: llm.tok.decode(ids.slice(0, upTo)) });
+    row(`Check: “${c.messages.at(-1).content}”`, `${agree} / ${upTo} tokens`, agree === upTo ? "identical to the reference" : "DIFFERS");
+  }
+  llm.reset();
+  return out;
+}
+
+// Speed: prompt processing (prefill) at a few lengths, generation speed, and a voice-turn time to first token.
+async function bench() {
+  const tok = llm.tok, be = llm.be;
+  const words = "The quick brown fox jumps over the lazy dog while the sun sets behind the hills and birds sing. ".repeat(40);
+  const base = tok.encode(words);
+  const r = { prefill: [], decode: null, turn: null };
+  for (const n of [16, 64, 256]) {
+    const ids = base.slice(0, n);
+    const times = [];
+    for (let i = 0; i < 3; i++) { llm.reset(); const t = performance.now(); await be.forward(ids, 0, {}); times.push(performance.now() - t); }
+    const m = median(times);
+    r.prefill.push({ tokens: n, ms: m, tokPerS: n / m * 1000 });
+    row(`Prompt processing, ${n} tokens`, ms(m), `${(n / m * 1000).toFixed(0)} tokens/s`);
+  }
+  // Generation: 64 steps after a 32-token prompt, feeding back whatever comes out (ignores end-of-text).
+  {
+    llm.reset();
+    let next = await be.forward(base.slice(0, 32), 0, {});
+    const times = [];
+    for (let i = 0; i < 64; i++) { const t = performance.now(); next = await be.forward([next], 32 + i, {}); times.push(performance.now() - t); }
+    const m = median(times);
+    r.decode = { msPerToken: m, tokPerS: 1000 / m, p90: [...times].sort((a, b) => a - b)[Math.floor(times.length * 0.9)] };
+    row("Generation speed", `${(1000 / m).toFixed(1)} tokens/s`, `median ${ms(m)} per token, 90th percentile ${ms(r.decode.p90)}`);
+  }
+  // A voice turn: system prompt + one earlier exchange already in the cache, then a new question.
+  {
+    llm.reset();
+    const msgs = [{ role: "system", content: SYSTEM }, { role: "user", content: "Hi, who are you?" }, { role: "assistant", content: "I'm your voice assistant. How can I help?" }];
+    const q = { role: "user", content: "What's a good name for a black cat?" };
+    await llm.feed(tok.encode(chatPrompt(msgs, false)), {});   // the conversation so far is in the cache
+    const t = performance.now();
+    let first = null, n = 0, text = "";
+    for await (const piece of llm.chat([...msgs, q], { maxTokens: 40 })) { if (first == null) first = performance.now() - t; text += piece; n++; }
+    r.turn = { ...llm.stats, firstPieceMs: first, text };
+    row("Voice turn: time to first token", ms(llm.stats.firstTokenMs), `${llm.stats.prefilled} new tokens processed, ${llm.stats.reused} reused from the cache`);
+    row("Voice turn: reply", `${llm.stats.tokens} tokens in ${ms(llm.stats.totalMs)}`, `“${text.trim().slice(0, 70)}”`);
+  }
+  llm.reset();
+  return r;
+}
+
+async function send() {
+  const text = $("say").value.trim();
+  if (!text) return;
+  $("say").value = "";
+  history.push({ role: "user", content: text });
+  const u = document.createElement("div"); u.className = "msg user"; u.textContent = text; $("chat").appendChild(u);
+  const a = document.createElement("div"); a.className = "msg"; a.textContent = "…"; $("chat").appendChild(a);
+  let reply = "";
+  for await (const piece of llm.chat([{ role: "system", content: SYSTEM }, ...history], { maxTokens: 200 })) { reply += piece; a.textContent = reply; }
+  history.push({ role: "assistant", content: reply.trim() });
+  const s = llm.stats, st = document.createElement("div"); st.className = "stat";
+  st.textContent = `first token ${ms(s.firstTokenMs)} (${s.prefilled} new prompt tokens, ${s.reused} cached) · ${s.decodeTokPerS.toFixed(1)} tokens/s`;
+  a.appendChild(st);
+}
+
+$("load").onclick = () => load().catch((e) => log(String(e.stack || e)));
+$("check").onclick = () => check().catch((e) => log(String(e.stack || e)));
+$("bench").onclick = () => bench().catch((e) => log(String(e.stack || e)));
+$("send").onclick = () => send().catch((e) => log(String(e.stack || e)));
+$("say").onkeydown = (e) => { if (e.key === "Enter") $("send").click(); };
+$("reset").onclick = () => { history.length = 0; $("chat").innerHTML = ""; llm.reset(); };
+$("backend").onchange = () => { $("thr-l").hidden = $("backend").value !== "cpu"; };
+$("backend").onchange();
+window.lab = { load, check, bench, get llm() { return llm; } };
+window.ready = true;
+</script>
+</body>
+</html>

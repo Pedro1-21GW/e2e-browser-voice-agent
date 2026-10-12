@@ -22,6 +22,7 @@ answering out loud. Every page follows the same recipe (the Feynman method, writ
 | 6 | [The browser as a computer](06-browser-as-a-computer.md) | WebAssembly, WebGPU, threads, caches: what are they? |
 | 7 | [Latency tricks](07-latency-tricks.md) | Why it answers in ~2 s instead of ~5 s |
 | 8 | [GPU kernels (H2)](08-gpu-kernels.md) | What does "writing our own engine" actually mean? |
+| H2 | [The Hypo 2 wiki](../h2-own-inference-engine/wiki/Home.md) | How our own engine runs the language model on the GPU and on the CPU |
 | – | [Glossary](glossary.md) | Every term in one line |
 
 ## The whole thing in one paragraph
@@ -35,4 +36,4 @@ model keeps writing the rest. All four models run inside the browser tab, mostly
 ## Where the experiments live
 
 - [H1: browser libraries + cache](../h1-browser-libs/README.md): built, measured, confirmed with WebGPU.
-- [H2: our own inference engine](../h2-own-inference-engine/README.md): in progress.
+- [H2: our own inference engine](../h2-own-inference-engine/README.md): in progress; the language model is done (see the [Hypo 2 wiki](../h2-own-inference-engine/wiki/Home.md)).

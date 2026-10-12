@@ -73,3 +73,6 @@ Kokoro on the CPU, where 8-bit was slower than 32-bit. "Compressed" and "fast" a
 
 **Bottom line:** a kernel's job is to keep data close to the cores that use it; our first kernels are correct,
 reach 60% of memory speed for fp32, and showed exactly which data movement to fix next.
+
+*Continued in the [Hypo 2 wiki](../h2-own-inference-engine/wiki/Home.md): the full language model on these kernels,
+what each kernel version taught, and the CPU engine.*

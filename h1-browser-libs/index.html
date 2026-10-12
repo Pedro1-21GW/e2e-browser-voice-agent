@@ -31,6 +31,7 @@
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="../assets/amber.css">
   <style>
+    [hidden] { display: none !important; }   /* .opt sets display, which would otherwise override the hidden attribute */
     :root { --c-end: #6f625a; --c-asr: #ffd8a8; --c-llm: #ff9d4d; --c-tts: #e2552e; }
     .grain { animation: none; }   /* keep the GPU free for the models on this page */
     h2 { font: 400 .72rem/1 var(--mono); text-transform: uppercase; letter-spacing: .32em; color: var(--text);
@@ -117,6 +118,8 @@
         <option value="normal">Normal (~830 MB, needs a GPU)</option>
         <option value="lite">Lite (~290 MB, needs a GPU, English)</option>
         <option value="superlite">Super-lite (~170 MB, CPU only, English)</option>
+        <option value="h2">Experimental · Hypo 2 engine, GPU (~970 MB): our own LLM engine</option>
+        <option value="h2cpu">Experimental · Hypo 2 engine, CPU only (~460 MB, English): our own LLM engine</option>
       </select>
     </label>
     <label class="opt" id="llm-opt">Language model
@@ -170,6 +173,7 @@
   <p class="credits" style="font-size:.92rem">A voice activity detector (Silero VAD) listens to the microphone in 32 ms frames. After 160 ms of silence it starts transcribing speculatively; if the silence reaches 500 ms, that's the end of your turn and the transcript is usually already done. If you start talking again before the agent makes a sound, it treats the pause as mid-sentence and merges both parts.</p>
   <p class="credits" style="font-size:.92rem">Speech recognition is Parakeet, a transducer model whose encoder weights are all −1, 0 or +1. The encoder runs on the GPU through WebGPU; the token-and-duration decoding loop is hand-written and runs on the CPU in ONNX Runtime Web. The text goes to a small language model on the GPU that streams tokens, and as soon as the first sentence (or a long first clause) is complete, Kokoro synthesizes it while the model keeps writing the rest.</p>
   <p class="credits" style="font-size:.92rem">The Lite and Super-lite versions are for phones: Moonshine tiny (English) replaces Parakeet, the device's own voice replaces Kokoro, and the language model is LFM2.5 350M on the GPU (Lite) or SmolLM2 135M on the CPU (Super-lite). They load one model at a time and keep about a third of the memory, because phone browsers reload a tab that uses too much.</p>
+  <p class="credits" style="font-size:.92rem">The two <b>Hypo 2 engine</b> versions are <b>experimental</b> (tested on one laptop). They swap the language model's library for the inference engine written in this repository (<a href="../h2-own-inference-engine/README.md">Hypothesis 2</a>): the same Qwen2.5 0.5B, read from a 4-bit GGUF file and run by hand-written WebGPU kernels, or, without a GPU, by C code compiled to WebAssembly with SIMD and threads. On the test laptop that is 6–7× faster token generation than the library on the same model.</p>
   <ul class="credits">
     <li>Speech to text: NVIDIA <a href="https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3">Parakeet TDT 0.6B v3</a> → Moondream <a href="https://huggingface.co/moondream/parakeet-redux">Parakeet Redux</a> → <a href="https://huggingface.co/Olicorne/parakeet-tdt-0.6b-v3-redux-onnx">ONNX export</a> (CC BY 4.0)</li>
     <li>Language model: Liquid AI <a href="https://huggingface.co/onnx-community/LFM2-350M-ONNX">LFM2</a> or Alibaba <a href="https://huggingface.co/onnx-community/Qwen2.5-0.5B-Instruct">Qwen2.5</a>, via <a href="https://github.com/huggingface/transformers.js">Transformers.js</a></li>
@@ -216,7 +220,12 @@ const PROFILES = {
   normal: { asr: "parakeet", llm: null, tts: "kokoro", mb: 830 },
   lite: { asr: "moonshine", llm: "lfm25-350m", tts: "system", mb: 290, maxSentences: 2 },
   superlite: { asr: "moonshine", llm: "smollm2-135m", tts: "system", mb: 170, maxSentences: 2 },
+  // Hypothesis 2: the language model runs on the inference engine written in this repo (own WebGPU kernels, or C
+  // compiled to WebAssembly SIMD with threads), reading a 4-bit GGUF file. The other stages stay as above.
+  h2: { asr: "parakeet", llm: "h2", tts: "kokoro", mb: 970 },
+  h2cpu: { asr: "moonshine", llm: "h2", tts: "system", mb: 460, cpu: true },
 };
+const H2_MODEL = params.get("h2model") || "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_0.gguf";
 const MOONSHINE = "onnx-community/moonshine-tiny-ONNX";   // English only; 8-bit: 28 MB
 let profile = PROFILES.normal;
 const SYSTEM_PROMPT = "You are a friendly voice assistant. Your replies are spoken aloud, so answer in one or two short, natural sentences. Never use lists, markdown, emojis or code.";
@@ -374,6 +383,7 @@ async function transcribe(wav) {
 let llm, llmKey;
 async function loadLLM() {
   const adapter = navigator.gpu && await navigator.gpu.requestAdapter().catch(() => null);
+  if (profile.llm === "h2") return loadH2LLM(adapter);
   // Without WebGPU: the LFM2 exports (4- and 8-bit) use GatherBlockQuantized, which the CPU runtime lacks,
   // while Qwen2.5's 8-bit export uses standard integer ops, so the CPU path always uses that.
   // Super-lite: SmolLM2 135M in 8-bit on the CPU (~15-20 tok/s on one laptop thread; weak on facts).
@@ -397,6 +407,21 @@ async function loadLLM() {
     },
   });
   return { device, dtype };
+}
+
+// Hypothesis 2: our own engine (h2-own-inference-engine/engine). GPU when there is one, unless the version is CPU-only.
+async function loadH2LLM(adapter) {
+  const { LLM } = await import("../h2-own-inference-engine/engine/llm.js");
+  const backend = adapter && !profile.cpu ? "webgpu" : "cpu";
+  $("st-llm").querySelector(".dev").textContent = backend === "webgpu" ? "GPU (own engine)" : "CPU (own engine)";
+  llm = await LLM.load({
+    url: H2_MODEL, backend,
+    onProgress: ({ stage, got, total }) => setStage("st-llm", stage === "upload"
+      ? { pct: 100, text: `preparing layer ${got} / ${total}` }
+      : { pct: got / total * 100, text: `${stage === "cache" ? "reading cache" : "downloading"} ${Math.round(got / 1e6)} / ${Math.round(total / 1e6)} MB` }),
+  });
+  llm.h2 = true;
+  return { device: backend + " (own engine: " + llm.be.info + ")", dtype: "q4_0" };
 }
 
 // ---------- text to speech ----------
@@ -561,17 +586,15 @@ async function handleUtterance(wav, speechEndAt, endpointMs, asrPromise = null) 
     setStatus("thinking", "Thinking…");
     const agentEl = addMsg("agent", "…");
     c.els.push(agentEl);
-    let firstAudioAt = null;
+    let firstAudioAt = null, audibleNow;
+    const audible = new Promise((r) => (audibleNow = r));
     const speaker = startSpeaker(id, (at) => {
-      if (firstAudioAt == null) { firstAudioAt = at; m.ttsReadyAt = now(); c.audible = true; setStatus("speaking", "Speaking"); }
+      if (firstAudioAt == null) { firstAudioAt = at; m.ttsReadyAt = now(); c.audible = true; setStatus("speaking", "Speaking"); audibleNow(); }
     });
 
     const llmStart = now();
     let reply = "", firstTokAt = null, firstSentenceAt = null, nTok = 0, capped = false;
-    stopper = new InterruptableStoppingCriteria();
-    const streamer = new TextStreamer(llm.tokenizer, {
-      skip_prompt: true, skip_special_tokens: true,
-      callback_function: (txt) => {
+    const onText = (txt) => {
         if (id !== turn || capped) return;
         if (firstTokAt == null) firstTokAt = now();
         reply += txt;
@@ -595,11 +618,32 @@ async function handleUtterance(wav, speechEndAt, endpointMs, asrPromise = null) 
         }
         agentEl.textContent = reply;
         speaker.push(txt);
-      },
-      token_callback_function: () => { nTok++; },
-    });
-    const msgs = [{ role: "system", content: SYSTEM_PROMPT }, ...history.slice(-6)];
-    await llm(msgs, { max_new_tokens: 120, do_sample: false, repetition_penalty: 1.05, streamer, stopping_criteria: stopper });
+    };
+    if (llm.h2) {
+      // Our engine streams text pieces (one per token) and keeps the conversation's KV cache between turns, so it
+      // gets a longer history (a sliding window would change the prompt's start and force a full recompute).
+      const msgs = [{ role: "system", content: SYSTEM_PROMPT }, ...history.slice(-40)];
+      const ac = new AbortController();
+      stopper = { interrupt: () => ac.abort() };
+      let waited = false;
+      for await (const piece of llm.chat(msgs, { maxTokens: 120, signal: ac.signal })) {
+        nTok++; onText(piece);
+        // Backpressure: once the first sentence is with the voice, let the voice have the GPU until it makes a sound.
+        // The engine writes ~20× faster than speech, so pausing costs nothing audible, while competing for the GPU
+        // delayed Kokoro's first audio from ~0.9 s to ~2 s.
+        if (!waited && firstSentenceAt != null && !tts.system) {
+          waited = true; speaker.flush();   // the voice's sentence splitter holds text until it sees more, or a flush
+          await Promise.race([audible, new Promise((r) => setTimeout(r, 4000))]);
+        }
+      }
+    } else {
+      const msgs = [{ role: "system", content: SYSTEM_PROMPT }, ...history.slice(-6)];
+      stopper = new InterruptableStoppingCriteria();
+      const streamer = new TextStreamer(llm.tokenizer, {
+        skip_prompt: true, skip_special_tokens: true, callback_function: onText, token_callback_function: () => { nTok++; },
+      });
+      await llm(msgs, { max_new_tokens: 120, do_sample: false, repetition_penalty: 1.05, streamer, stopping_criteria: stopper });
+    }
     const llmEnd = now();
     if (firstSentenceAt == null) firstSentenceAt = llmEnd;   // reply without terminal punctuation
     speaker.close();
@@ -763,7 +807,8 @@ async function load() {
   await transcribe(new Float32Array(SR));
   await transcribe(new Float32Array(3 * SR));
   resetVad(); await vadProb(new Float32Array(FRAME));
-  await llm([{ role: "user", content: "Hi" }], { max_new_tokens: 4, do_sample: false });
+  if (llm.h2) { for await (const _ of llm.chat([{ role: "system", content: SYSTEM_PROMPT }, { role: "user", content: "Hi" }], { maxTokens: 4 })) { /* warm-up */ } }
+  else await llm([{ role: "user", content: "Hi" }], { max_new_tokens: 4, do_sample: false });
   if (!tts.system) await tts.generate("Hello there.", { voice: $("voice-select").value });
   const warmMs = now() - w0;
 
@@ -791,10 +836,16 @@ function setProfile(key) {
   $("asr-name").textContent = small ? "Moonshine tiny" : "Parakeet TDT 0.6B v3 (Redux)";
   $("asr-det").textContent = small ? "8-bit · 28 MB · English only" : "ternary encoder, 2-bit ONNX · 208 MB";
   $("st-asr").querySelector(".dev").textContent = small ? "CPU" : "GPU + CPU";
-  const m = LLMS[profile.llm || $("llm-select").value];
-  $("llm-name").textContent = m.name;
-  $("llm-det").textContent = key === "superlite" ? `8-bit · ${m.mb} MB` : `4-bit · ~${m.mb} MB`;
-  $("st-llm").querySelector(".dev").textContent = key === "superlite" ? "CPU" : "GPU";
+  if (profile.llm === "h2") {
+    $("llm-name").textContent = "Qwen2.5 0.5B Instruct · our own engine";
+    $("llm-det").textContent = "4-bit GGUF · 429 MB · no ML library";
+    $("st-llm").querySelector(".dev").textContent = profile.cpu ? "CPU (own engine)" : "GPU (own engine)";
+  } else {
+    const m = LLMS[profile.llm || $("llm-select").value];
+    $("llm-name").textContent = m.name;
+    $("llm-det").textContent = key === "superlite" ? `8-bit · ${m.mb} MB` : `4-bit · ~${m.mb} MB`;
+    $("st-llm").querySelector(".dev").textContent = key === "superlite" ? "CPU" : "GPU";
+  }
   $("tts-name").textContent = system ? "Built-in voice" : "Kokoro 82M";
   $("tts-det").textContent = system ? "the device's own voice · nothing to download" : "fp32 · 325 MB";
   $("st-tts").querySelector(".dev").textContent = system ? "device" : "GPU";

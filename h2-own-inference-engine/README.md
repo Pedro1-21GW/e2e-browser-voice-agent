@@ -4,7 +4,20 @@
 > inference engine we write ourselves (our own WebGPU kernels and model code), still ship everything as one
 > HTML file, and stay at least as fast as H1.
 
-**Status: 🔬 started.** Milestone 0 (GPU harness + first kernels) in progress; see the log at the bottom.
+> **Experimental.** This is a research experiment, not a product: tested on one laptop (GTX 1050, Chrome on Windows), with three test prompts and clean synthetic audio. Expect rough edges on other hardware and browsers.
+
+**Status: 🔬 in progress. Milestone 1 (the language model) done, on the GPU and on the CPU.** Qwen2.5 0.5B runs on
+our own engine, gives the same tokens as Hugging Face Transformers, writes **6.5× (GPU) and 6× (CPU) faster** than
+the libraries on the same model, and already powers two versions of the H1 voice agent. On a laptop with no usable
+GPU, the agent now answers in **0.6–1.9 s** instead of 12–18 s. Details in the log below and in the
+[Hypo 2 wiki](wiki/Home.md).
+
+| Try it (local: `python serve.py`, then open) | What it is |
+|---|---|
+| [m1-llm/](m1-llm/index.html) | LLM lab: load the model on GPU or CPU, check it against the reference, benchmark, chat |
+| [../h1-browser-libs/?profile=h2](../h1-browser-libs/index.html?profile=h2) | The voice agent with our engine as its language model, on the GPU |
+| [../h1-browser-libs/?profile=h2cpu](../h1-browser-libs/index.html?profile=h2cpu) | The same, CPU only (Moonshine + our engine + the device's voice) |
+| [m0-kernels/](m0-kernels/index.html) | The first kernel experiments |
 
 ## Why it matters
 
@@ -28,7 +41,7 @@ real hardware.
 | Published model weights (safetensors / GGUF / ONNX files read as plain data) | ONNX Runtime, Transformers.js, kokoro-js, WebLLM, or any ML runtime |
 | WebGPU and WebAssembly as the "hardware" | Server-side inference |
 | Plain JavaScript for orchestration | |
-| **Temporary exceptions, to be removed by the end:** the tokenizer and the TTS phonemizer (espeak-ng) | |
+| **Temporary exception, to be removed by the end:** the TTS phonemizer (espeak-ng). (The tokenizer was on this list; it's now ours.) | |
 
 ## Success criteria
 
@@ -36,13 +49,16 @@ real hardware.
    tolerance, and produce the same tokens / transcripts on the test clips.
 2. **Fast:** each stage at least matches H1 on the same laptop:
 
-   | Stage | H1 number to beat |
-   |---|---|
-   | Speech encoder, 6 s clip | ~180 ms |
-   | LLM decode | 12–23 tokens/s |
-   | TTS | ≥ 1.9× real time |
-   | Voice-to-voice through the mic | 1.4–2.1 s |
-3. **One HTML file** (+ the service worker), no ML libraries.
+   | Stage | H1 number to beat | H2 so far |
+   |---|---|---|
+   | Speech encoder, 6 s clip | ~180 ms | not started (M2) |
+   | LLM decode | 12–23 tokens/s | ✅ **98 tokens/s** on the GPU, **28–33** on the CPU (Qwen2.5 0.5B, a larger model than H1's LFM2 350M) |
+   | TTS | ≥ 1.9× real time | not started (M4) |
+   | Voice-to-voice through the mic | 1.4–2.1 s | GPU: same range so far (the voice is now the slow stage); CPU only: 0.6–1.9 s (H1: 12–18 s) |
+3. **One HTML file** (+ the service worker), no ML libraries. (During development the engine is a handful of ES
+   modules plus one WebAssembly file; inlining them is part of M5.)
+4. **(Added in M1) Good on the CPU too.** Phones and many laptops have no WebGPU; the engine has a CPU backend
+   (C compiled to WebAssembly with SIMD and threads) held to the same correctness check.
 
 ## Plan
 
@@ -57,13 +73,13 @@ M0  GPU harness + kernels ──▶ M1  LLM ──▶ M2  Parakeet encoder ─�
 | # | Milestone | What gets built | Done when |
 |---|---|---|---|
 | **M0** | GPU harness + kernels | WebGPU setup, buffer helpers, timing; kernels for matrix-vector and matrix-matrix multiply (fp32, 4-bit, ternary), RMSNorm/LayerNorm, softmax, RoPE, SiLU, attention | each kernel matches a CPU reference; bandwidth measured against the GPU's limit |
-| **M1** | Language model | Llama-style transformer forward pass with KV cache; start with SmolLM2-135M for fast iteration, then Qwen2.5-0.5B (same model as H1's CPU fallback, for direct comparison) | greedy tokens match the reference; tok/s vs Transformers.js |
+| **M1** ✅ | Language model | Llama-style transformer forward pass with KV cache, on WebGPU and on the CPU (WebAssembly); Qwen2.5-0.5B (same model as H1's CPU fallback, for direct comparison) | greedy tokens match the reference; tok/s vs Transformers.js |
 | **M2** | Parakeet encoder | Subsampling convolutions + 24 Conformer blocks (feed-forward, relative-position attention, depthwise conv); ternary matmul kernel; the H1 decoding loop with our own LSTM predictor + joint | same transcripts as H1; encoder ≤ 180 ms for 6 s |
 | **M3** | Silero VAD | small conv + LSTM network, likely on the CPU in plain JS | same speech probabilities as H1 |
 | **M4** | Kokoro TTS | text encoder, duration/prosody predictor, iSTFTNet vocoder | audio matches the reference closely; ≥ 1.9× real time |
 | **M5** | Integration | the H1 page with each library swapped for our engine, one stage at a time | voice-to-voice ≤ H1 |
 
-Useful prior work in sibling projects: `heavybuffer-parakeet-cpp` already runs Parakeet TDT 0.6B v3 from a
+Prior work (papers and engines) is collected in the wiki: [Prior work](wiki/06-prior-work.md). Useful prior work in sibling projects: `heavybuffer-parakeet-cpp` already runs Parakeet TDT 0.6B v3 from a
 GGUF file with parakeet.cpp, which documents the weight layout we'll need in M2.
 
 ## How each kernel is checked
@@ -133,3 +149,98 @@ Six hand-written WebGPU kernels, each checked against a plain-JavaScript referen
 - Matrix × matrix: vector (vec4) loads, bigger K tiles, a tile shape that fits 76–80 rows, then fused
   dequantization so 4-bit and ternary weights are unpacked while loading the tile.
 - Then RMSNorm / LayerNorm, softmax, RoPE and attention, which M1 (the LLM) needs.
+
+### M1: the language model, on the GPU and on the CPU ([m1-llm/](m1-llm/index.html), [engine/](https://github.com/Pedro1-21GW/e2e-browser-voice-agent/tree/main/h2-own-inference-engine/engine))
+
+**What was built** (no ML library; ~1,700 lines):
+
+```
+gguf.js       read the GGUF file (metadata, tensor table, weights as bytes), cached in Cache Storage
+tokenizer.js  byte-level BPE from the file's own vocabulary and merges + Qwen's chat format
+llm.js        load on "webgpu" or "cpu"; chat() streams text and keeps the KV cache between turns
+webgpu.js     WGSL kernels: embedding, RMSNorm, quantize, Q4_0 / Q8_0 matrix × vector, RoPE + cache, attention,
+              SwiGLU, sampling (argmax / Gumbel); one command buffer per pass; the next token never leaves the GPU
+kernels.c     the same model in C → WebAssembly (SIMD128 or relaxed SIMD, 1 or n threads), built by build.py (Zig)
+cpu*.js       leader worker + helper workers on one shared WebAssembly memory
+```
+
+Model: Qwen2.5 0.5B Instruct, `qwen2.5-0.5b-instruct-q4_0.gguf` (429 MB: layers in Q4_0, output table in Q8_0).
+
+**Correct.** [reference.py](m1-llm/reference.py) runs the same GGUF file through Hugging Face Transformers. The
+tokenizer matches on 13/13 strings and prompts. Top-5 first-step scores: within 0.0005 on the GPU; within 0.11–0.25
+on the CPU (8-bit activations, as llama.cpp). Greedy tokens: identical up to the end of the reply on all three
+prompts, both backends, every thread count.
+
+**Fast.** [bench.py](m1-llm/bench.py), same laptop, same day; "baseline" = Transformers.js 4.3 + ONNX Runtime Web
+1.30 on the same model ([baseline.html](m1-llm/baseline.html)):
+
+| | Prompt, 64 tokens | Prompt, 256 tokens | Writing | Voice-turn first token* |
+|---|---|---|---|---|
+| baseline, GPU (q4) | 238 ms | 702 ms | 15.3 tokens/s | – |
+| **ours, GPU** | 178 ms | 766 ms | **98 tokens/s** | **69 ms** |
+| baseline, CPU (q8, 4 threads) | 1,028 ms | 3,951 ms | 5.0 tokens/s | – |
+| ours, CPU, 1 thread, plain SIMD | 2,928 ms | 10,936 ms | 12.9 tokens/s | 745 ms |
+| ours, CPU, 1 thread, relaxed SIMD | 1,728 ms | 7,126 ms | 16.6 tokens/s | 634 ms |
+| ours, CPU, 4 threads | 703 ms | 3,010 ms | 31.3 tokens/s | 211 ms |
+| **ours, CPU, 8 threads for prompts / 4 for writing** | **571 ms** | **2,597 ms** | **28–33 tokens/s** | **163 ms** |
+
+\* system prompt and one earlier exchange already in the cache, 18 new tokens. The laptop's speed varies ±15% from
+run to run (heat), so writing speeds are given as ranges where runs differed.
+
+**GPU log** (per-kernel times from timestamp queries, `--enable-webgpu-developer-features`):
+
+| Step | gate+up matrix, one token | Whole token | Note |
+|---|---|---|---|
+| v1: thread per weight word, 4 rows per workgroup | 134 µs | 10.2 ms | 79% of the time in matrix × vector |
+| v1, 16 rows per workgroup (sweep of rows × workgroup size) | ~100 µs | 8.0 ms | more loads in flight |
+| v2: input in shared memory, a whole block per lane, RMSNorm/SwiGLU fused | 242 µs | 13.7 ms | **slower**: 32-way shared-memory bank conflicts |
+| v3: + int8 input, `dot4I8Packed` (DP4A), quantized in every workgroup | 219 µs | 12.6 ms | **slower**: 1,216 workgroups redo the same setup |
+| v4: input quantized once by a small kernel, DP4A matrix × vector | 107 µs | 8.5–9.5 ms | ties v1; kept (llama.cpp's MMVQ approach, fewer kernels) |
+
+- A plain read kernel on this GPU reaches **76 GB/s** (spec: 112). 345 MB per token → 4.5 ms floor; we're at ~9–10 ms.
+- The output table (153 MB) runs at 61–68 GB/s (80–90% of the practical limit); the 4-bit layer matrices at
+  40–46 GB/s. An empty dispatch costs 5–10 µs and a token needs ~240 dispatches: ~2 ms of launch overhead.
+- Reading the token back costs nothing measurable (GPU time 10.16 ms vs wall time 10.13 ms).
+
+**CPU log:**
+
+- Toolchain: `pip install ziglang`, then [build.py](engine/build.py) compiles kernels.c into 4 variants
+  (1 thread / threads × SIMD128 / relaxed SIMD); the page picks the best one the browser supports.
+- `-ffast-math` made the relaxed build output NaN everywhere; removed.
+- Threads were bit-identical with 2 but garbage with 3–4, and deadlocked with mixed thread counts: helpers read the
+  job's "compute logits" flag after the last barrier, when the leader could already be setting up the next pass.
+  Every thread now copies the job's parameters before the first barrier. Barrier self-test: 20,000 rounds, 0 errors,
+  0.3–0.7 µs per barrier.
+- Profile (one token, 34.8 ms): output table 12.3 ms, gate+up 12.2 ms, down 6.1 ms. Memory bandwidth from
+  WebAssembly: **14–17 GB/s with 1–8 threads** (one DDR4-2400 stick, 19.2 GB/s on paper), so writing is
+  memory-bound: ceiling ~43 tokens/s.
+- 4 rows per pass (one token) and 2-row × 4-token tiles (prompts): 256-token prompt 5.6 → 4.0 s; then 8 threads for
+  prompts and 4 for writing: 2.6–3.0 s, while 8 threads for writing is slower (hyperthreads fight over memory).
+- Not done (measured first): dropping the 34% of the vocabulary that isn't Latin script from the output table would
+  save ~10% of writing time; not worth the risk for now.
+
+**In the voice agent** (H1 page, `?profile=h2` / `?profile=h2cpu`; [latency_test.py](../h1-browser-libs/bench/latency_test.py), test clips):
+
+| | First token | First sentence | First sound after it | Voice-to-voice |
+|---|---|---|---|---|
+| GPU, H1 Normal (LFM2 350M, library) | 189–258 ms | 191–436 ms | 0.72–1.70 s | 1.31–2.45 s |
+| GPU, Hypo 2 engine (Qwen2.5 0.5B) | 59–106 ms | 126–255 ms | 0.91–1.99 s | 1.24–2.67 s |
+| CPU only, H1 Super-lite (SmolLM2 135M, library) | 0.43–0.90 s | 1.2–1.6 s | 0.8–1.8 s | 2.2–3.9 s |
+| **CPU only, Hypo 2 engine (Qwen2.5 0.5B)** | **0.16–0.39 s** | **0.34–1.04 s** | 0.08–0.14 s | **0.56–1.95 s** |
+
+- A faster model first made the GPU voice *slower* (2.0 s to the first sound): the engine kept the GPU busy while
+  Kokoro waited. Fix: after the first sentence, pause until the voice makes a sound (and flush the voice's sentence
+  splitter first, or both wait on each other for 4 s).
+- The engine gets the last 40 messages instead of 6, so the cache stays valid (a sliding window recomputed the whole
+  conversation: 501 ms instead of ~70).
+- Page memory, CPU version: 3.2 GB → 1.66 GB after reading the model file once instead of cloning the response.
+
+**Verdict for M1: confirmed.** Our own engine runs the language model correctly and faster than the libraries, on
+the GPU and on the CPU, inside the voice agent.
+
+**Next**
+- GPU: a tiled matrix × matrix kernel for prompts (now on par with the library, 766 vs 702 ms for 256 tokens);
+  fewer, fused dispatches for one token (~240 today).
+- M4 (the voice) is now the slow stage on the GPU, and M2 (the speech encoder) is the slow stage on the CPU
+  (Moonshine on 1 thread, ~0.4–0.8 s).
+- Stream the weights straight into GPU / WebAssembly memory instead of holding the file in JavaScript.

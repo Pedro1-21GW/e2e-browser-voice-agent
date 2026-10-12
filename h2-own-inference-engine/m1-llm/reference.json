@@ -1,0 +1,394 @@
+{
+ "model": "Qwen/Qwen2.5-0.5B-Instruct-GGUF/qwen2.5-0.5b-instruct-q4_0.gguf",
+ "steps": 32,
+ "chats": [
+  {
+   "messages": [
+    {
+     "role": "system",
+     "content": "You are a helpful voice assistant. Answer in one or two short sentences."
+    },
+    {
+     "role": "user",
+     "content": "What is the capital of France?"
+    }
+   ],
+   "prompt": "<|im_start|>system\nYou are a helpful voice assistant. Answer in one or two short sentences.<|im_end|>\n<|im_start|>user\nWhat is the capital of France?<|im_end|>\n<|im_start|>assistant\n",
+   "prompt_ids": [
+    151644,
+    8948,
+    198,
+    2610,
+    525,
+    264,
+    10950,
+    7743,
+    17847,
+    13,
+    21806,
+    304,
+    825,
+    476,
+    1378,
+    2805,
+    22870,
+    13,
+    151645,
+    198,
+    151644,
+    872,
+    198,
+    3838,
+    374,
+    279,
+    6722,
+    315,
+    9625,
+    30,
+    151645,
+    198,
+    151644,
+    77091,
+    198
+   ],
+   "top5_ids": [
+    785,
+    59604,
+    40,
+    49000,
+    43
+   ],
+   "top5_logits": [
+    22.3267,
+    19.0497,
+    16.383,
+    16.0524,
+    14.8096
+   ],
+   "greedy_ids": [
+    785,
+    6722,
+    315,
+    9625,
+    374,
+    12095,
+    13,
+    151645
+   ],
+   "greedy_text": "The capital of France is Paris.<|im_end|>"
+  },
+  {
+   "messages": [
+    {
+     "role": "system",
+     "content": "You are a helpful voice assistant. Answer in one or two short sentences."
+    },
+    {
+     "role": "user",
+     "content": "Give me one tip to sleep better."
+    }
+   ],
+   "prompt": "<|im_start|>system\nYou are a helpful voice assistant. Answer in one or two short sentences.<|im_end|>\n<|im_start|>user\nGive me one tip to sleep better.<|im_end|>\n<|im_start|>assistant\n",
+   "prompt_ids": [
+    151644,
+    8948,
+    198,
+    2610,
+    525,
+    264,
+    10950,
+    7743,
+    17847,
+    13,
+    21806,
+    304,
+    825,
+    476,
+    1378,
+    2805,
+    22870,
+    13,
+    151645,
+    198,
+    151644,
+    872,
+    198,
+    35127,
+    752,
+    825,
+    11552,
+    311,
+    6084,
+    2664,
+    13,
+    151645,
+    198,
+    151644,
+    77091,
+    198
+   ],
+   "top5_ids": [
+    21453,
+    1249,
+    88492,
+    41745,
+    32
+   ],
+   "top5_logits": [
+    16.9707,
+    16.8425,
+    16.2454,
+    16.1568,
+    15.4273
+   ],
+   "greedy_ids": [
+    21453,
+    311,
+    5695,
+    264,
+    12966,
+    6084,
+    9700,
+    11,
+    5648,
+    15310,
+    1573,
+    4845,
+    11,
+    323,
+    1855,
+    264,
+    33848,
+    88507,
+    14021,
+    13,
+    151645
+   ],
+   "greedy_text": "Try to establish a consistent sleep schedule, avoid screens before bed, and create a relaxing bedtime routine.<|im_end|>"
+  },
+  {
+   "messages": [
+    {
+     "role": "system",
+     "content": "You are a helpful voice assistant. Answer in one or two short sentences."
+    },
+    {
+     "role": "user",
+     "content": "How many legs does an octopus have?"
+    }
+   ],
+   "prompt": "<|im_start|>system\nYou are a helpful voice assistant. Answer in one or two short sentences.<|im_end|>\n<|im_start|>user\nHow many legs does an octopus have?<|im_end|>\n<|im_start|>assistant\n",
+   "prompt_ids": [
+    151644,
+    8948,
+    198,
+    2610,
+    525,
+    264,
+    10950,
+    7743,
+    17847,
+    13,
+    21806,
+    304,
+    825,
+    476,
+    1378,
+    2805,
+    22870,
+    13,
+    151645,
+    198,
+    151644,
+    872,
+    198,
+    4340,
+    1657,
+    14201,
+    1558,
+    458,
+    18491,
+    45870,
+    614,
+    30,
+    151645,
+    198,
+    151644,
+    77091,
+    198
+   ],
+   "top5_ids": [
+    2082,
+    18053,
+    32,
+    785,
+    46
+   ],
+   "top5_logits": [
+    25.4072,
+    20.0748,
+    19.8362,
+    19.3311,
+    18.6417
+   ],
+   "greedy_ids": [
+    2082,
+    18491,
+    45870,
+    702,
+    8063,
+    14201,
+    13,
+    151645
+   ],
+   "greedy_text": "An octopus has eight legs.<|im_end|>"
+  }
+ ],
+ "tokenizer": [
+  {
+   "text": "Hello, world!",
+   "ids": [
+    9707,
+    11,
+    1879,
+    0
+   ]
+  },
+  {
+   "text": "  two  spaces and\ttab",
+   "ids": [
+    220,
+    1378,
+    220,
+    12621,
+    323,
+    58149
+   ]
+  },
+  {
+   "text": "I'm sure it's 12345 or 3.14159...",
+   "ids": [
+    40,
+    2776,
+    2704,
+    432,
+    594,
+    220,
+    16,
+    17,
+    18,
+    19,
+    20,
+    476,
+    220,
+    18,
+    13,
+    16,
+    19,
+    16,
+    20,
+    24,
+    1112
+   ]
+  },
+  {
+   "text": "São Paulo é ótimo, não é?",
+   "ids": [
+    50,
+    3413,
+    36926,
+    3958,
+    40867,
+    83,
+    11366,
+    11,
+    12393,
+    3958,
+    30
+   ]
+  },
+  {
+   "text": "emoji 🙂👍 and 日本語",
+   "ids": [
+    37523,
+    27484,
+    144349,
+    323,
+    75402,
+    21894,
+    102819
+   ]
+  },
+  {
+   "text": "def f(x):\n    return x**2\n\n\nprint(f(3))",
+   "ids": [
+    750,
+    282,
+    2075,
+    982,
+    262,
+    470,
+    856,
+    334,
+    17,
+    1406,
+    1350,
+    955,
+    7,
+    18,
+    593
+   ]
+  },
+  {
+   "text": "<|im_start|>user\nhi<|im_end|>\n",
+   "ids": [
+    151644,
+    872,
+    198,
+    6023,
+    151645,
+    198
+   ]
+  },
+  {
+   "text": "UPPER lower MiXeD 1st 2nd 3rd",
+   "ids": [
+    3124,
+    9654,
+    4722,
+    20740,
+    55,
+    68,
+    35,
+    220,
+    16,
+    267,
+    220,
+    17,
+    303,
+    220,
+    18,
+    6498
+   ]
+  },
+  {
+   "text": "trailing spaces   ",
+   "ids": [
+    376,
+    14277,
+    12621,
+    262
+   ]
+  },
+  {
+   "text": "line\r\nbreaks\n\n",
+   "ids": [
+    1056,
+    319,
+    8960,
+    82,
+    271
+   ]
+  }
+ ]
+}

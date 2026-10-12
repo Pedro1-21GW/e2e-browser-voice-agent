@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>H2 LLM baseline (Transformers.js)</title>
+<link rel="icon" href="data:,">
+<script type="importmap">
+  { "imports": { "onnxruntime-web/webgpu": "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.30.0/dist/ort.webgpu.min.mjs",
+                 "onnxruntime-common": "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.30.0/dist/ort.webgpu.min.mjs",
+                 "@huggingface/transformers": "https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.0/dist/transformers.web.js" } }
+</script>
+</head>
+<body>
+<p>Baseline for the H2 LLM benchmark: the same model (Qwen2.5 0.5B Instruct) through Transformers.js 4.3 + ONNX Runtime
+Web 1.30, the libraries H1 uses. Driven by <code>bench.py baseline:webgpu baseline:wasm</code>.</p>
+<pre id="out"></pre>
+<script type="module">
+import * as ortGpu from "onnxruntime-web/webgpu";
+import { AutoTokenizer, AutoModelForCausalLM, TextStreamer, env } from "@huggingface/transformers";
+const ORT_DIST = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.30.0/dist/";
+ortGpu.env.wasm.wasmPaths = ORT_DIST;
+env.backends.onnx.wasm.wasmPaths = ORT_DIST;
+const MODEL = "onnx-community/Qwen2.5-0.5B-Instruct";
+const median = (a) => { const s = [...a].sort((x, y) => x - y); return s[s.length >> 1]; };
+let tok, model;
+
+async function load({ device, threads = 4 }) {
+  ortGpu.env.wasm.numThreads = env.backends.onnx.wasm.numThreads = self.crossOriginIsolated ? threads : 1;
+  const dtype = device === "webgpu" ? "q4" : "q8";          // what H1 uses on this laptop (no fp16 shaders)
+  const t0 = performance.now();
+  tok = await AutoTokenizer.from_pretrained(MODEL);
+  model = await AutoModelForCausalLM.from_pretrained(MODEL, { device, dtype });
+  const ids = tok("Hi", { return_tensors: "pt" });
+  await model.generate({ ...ids, max_new_tokens: 2, do_sample: false });   // warm-up
+  return { info: `Transformers.js ${device} ${dtype}`, loadMs: performance.now() - t0 };
+}
+
+async function bench() {
+  const words = "The quick brown fox jumps over the lazy dog while the sun sets behind the hills and birds sing. ".repeat(40);
+  const base = tok.encode(words, { add_special_tokens: false });
+  const r = { prefill: [], decode: null };
+  const gen = async (ids, n, min = 0) => {
+    const times = [];
+    const streamer = new TextStreamer(tok, { skip_prompt: true, callback_function: () => {}, token_callback_function: () => times.push(performance.now()) });
+    const input_ids = new (await import("@huggingface/transformers")).Tensor("int64", BigInt64Array.from(ids, BigInt), [1, ids.length]);
+    const attention_mask = new (await import("@huggingface/transformers")).Tensor("int64", new BigInt64Array(ids.length).fill(1n), [1, ids.length]);
+    const t0 = performance.now();
+    await model.generate({ input_ids, attention_mask, max_new_tokens: n, min_new_tokens: min, do_sample: false, streamer });
+    return { t0, times, end: performance.now() };
+  };
+  for (const n of [16, 64, 256]) {
+    const ms = [];
+    for (let i = 0; i < 3; i++) { const g = await gen(base.slice(0, n), 1, 1); ms.push(g.end - g.t0); }
+    const m = median(ms);
+    r.prefill.push({ tokens: n, ms: m, tokPerS: n / m * 1000 });
+  }
+  const g = await gen(base.slice(0, 32), 65, 65);
+  const steps = []; for (let i = 1; i < g.times.length; i++) steps.push(g.times[i] - g.times[i - 1]);
+  const m = median(steps);
+  r.decode = { msPerToken: m, tokPerS: 1000 / m, p90: [...steps].sort((a, b) => a - b)[Math.floor(steps.length * 0.9)] };
+  document.getElementById("out").textContent = JSON.stringify(r, null, 1);
+  return r;
+}
+window.base = { load, bench };
+window.ready = true;
+</script>
+</body>
+</html>

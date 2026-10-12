@@ -43,10 +43,10 @@
       <div class="links"><a href="h1-browser-libs/">Try the demo →</a><a href="wiki/?doc=h1-browser-libs/README.md">Write-up</a><a href="https://github.com/Pedro1-21GW/e2e-browser-voice-agent/tree/main/h1-browser-libs">Code</a></div>
     </div>
     <div class="card">
-      <span class="tag wip">Hypo 2 · in progress</span>
+      <span class="tag wip">Hypo 2 · experiment in progress</span>
       <h3>Can we write the inference engine ourselves and still run it all in one HTML file?</h3>
-      <p>Replacing the libraries with hand-written WebGPU kernels, one piece at a time, checked for correctness against a reference and for speed against Hypo 1. The first kernels are correct; the fastest reaches 60% of the GPU's memory bandwidth.</p>
-      <div class="links"><a href="h2-own-inference-engine/m0-kernels/">Kernel lab →</a><a href="wiki/?doc=h2-own-inference-engine/README.md">Plan and log</a><a href="https://github.com/Pedro1-21GW/e2e-browser-voice-agent/tree/main/h2-own-inference-engine">Code</a></div>
+      <p>The language model now runs on an engine written for this project: hand-written WebGPU kernels (98 tokens/s) and C compiled to WebAssembly with SIMD and threads (28–33 tokens/s), 6× faster than the libraries on the same model and token-for-token identical to Hugging Face. With it, the voice agent answers in about 1 s on a laptop CPU alone, where Hypo 1 needed 12–18 s. Experimental: measured on one laptop.</p>
+      <div class="links"><a href="h2-own-inference-engine/m1-llm/">LLM lab →</a><a href="h1-browser-libs/?profile=h2cpu">Agent, CPU only →</a><a href="h1-browser-libs/?profile=h2">Agent, GPU →</a><a href="wiki/?doc=h2-own-inference-engine/wiki/Home.md">Hypo 2 wiki</a><a href="wiki/?doc=h2-own-inference-engine/README.md">Plan and log</a><a href="https://github.com/Pedro1-21GW/e2e-browser-voice-agent/tree/main/h2-own-inference-engine">Code</a></div>
     </div>
   </div>
 
@@ -60,6 +60,7 @@
     <li><a href="wiki/?p=06-browser-as-a-computer"><span class="n">06</span><span>The browser as a computer<span class="q">WebAssembly, WebGPU, threads, caches</span></span></a></li>
     <li><a href="wiki/?p=07-latency-tricks"><span class="n">07</span><span>Latency tricks<span class="q">Why ~2 s instead of ~5 s</span></span></a></li>
     <li><a href="wiki/?p=08-gpu-kernels"><span class="n">08</span><span>GPU kernels<span class="q">What Hypo 2 is building</span></span></a></li>
+    <li><a href="wiki/?doc=h2-own-inference-engine/wiki/Home.md"><span class="n">H2</span><span>Hypo 2 wiki<span class="q">Our own engine: GPU kernels, C/WebAssembly, threads</span></span></a></li>
   </ul>
 
   <h2 class="ch">Source</h2>
